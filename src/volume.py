@@ -9,6 +9,7 @@
 import argparse
 import sys
 import time
+from collections import deque
 
 try:
     import serial
@@ -25,7 +26,8 @@ except ImportError:
 
 
 BAUD_RATE = 9600
-CHANGE_THRESHOLD = 0.01
+MIN_VOLUME_CHANGE = 3
+FILTER_SIZE = 5
 ARDUINO_MARKERS = ("arduino", "ch340", "ch341", "cp210", "usb serial")
 
 
@@ -84,17 +86,22 @@ def main() -> int:
             # Arduino Nano после открытия порта может перезапуститься.
             time.sleep(2.0)
             connection.reset_input_buffer()
-            previous_value = None
+            measurements = deque(maxlen=FILTER_SIZE)
+            previous_volume = None
             print(f"Порт {port}. Для выхода нажмите Ctrl+C.")
 
             while True:
                 value = read_potentiometer(connection)
                 if value is None:
                     continue
-                if previous_value is None or abs(value - previous_value) >= CHANGE_THRESHOLD:
-                    endpoint_volume.SetMasterVolumeLevelScalar(value, None)
-                    previous_value = value
-                    print(f"\rГромкость: {value * 100:3.0f}%", end="", flush=True)
+                measurements.append(value)
+                filtered_value = sum(measurements) / len(measurements)
+                volume = round(filtered_value * 100)
+
+                if previous_volume is None or abs(volume - previous_volume) >= MIN_VOLUME_CHANGE:
+                    endpoint_volume.SetMasterVolumeLevelScalar(volume / 100, None)
+                    previous_volume = volume
+                    print(f"\rГромкость: {volume:3d}%", end="", flush=True)
     except KeyboardInterrupt:
         print("\nРабота завершена.")
         return 0
