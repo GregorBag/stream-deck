@@ -26,7 +26,7 @@ except ImportError:
 
 
 BAUD_RATE = 9600
-MIN_VOLUME_CHANGE = 3
+MIN_VOLUME_CHANGE = 1
 FILTER_SIZE = 5
 ARDUINO_MARKERS = ("arduino", "ch340", "ch341", "cp210", "usb serial")
 
@@ -52,25 +52,16 @@ def find_port() -> str:
     raise RuntimeError(f"Не удалось однозначно выбрать порт: {port_list}. Укажите --port")
 
 
-def read_potentiometer(connection: serial.Serial) -> float | None:
-    """Прочитать значение из однострочного или трёхстрочного формата."""
-    line = connection.readline().decode("ascii", errors="ignore").strip()
-    if not line:
-        return None
+def read_data(connection: serial.Serial) -> float | None:
+    min_value = 490
+    max_value = 990
 
-    marker = "Potentiometer:"
-    try:
-        if marker in line:
-            value_text = line.split(marker, 1)[1].split(",", 1)[0]
-        elif line in ("0", "1"):
-            value_text = connection.readline().decode("ascii", errors="ignore").strip()
-        else:
-            return None
-        value = float(value_text)
-    except ValueError:
-        return None
+    value_text = connection.readline().decode("ascii", errors="ignore").strip().split('|')
 
-    return max(0.0, min(1.0, value))
+    value = float(value_text[0])
+    value = (value - min_value)/(max_value - min_value)
+
+    return max(0.0, min(1.0, value)), int(value_text[1])
 
 
 def main() -> int:
@@ -91,17 +82,17 @@ def main() -> int:
             print(f"Порт {port}. Для выхода нажмите Ctrl+C.")
 
             while True:
-                value = read_potentiometer(connection)
-                if value is None:
-                    continue
-                measurements.append(value)
+                pot, btn = read_data(connection)
+                measurements.append(pot)
                 filtered_value = sum(measurements) / len(measurements)
                 volume = round(filtered_value * 100)
 
                 if previous_volume is None or abs(volume - previous_volume) >= MIN_VOLUME_CHANGE:
                     endpoint_volume.SetMasterVolumeLevelScalar(volume / 100, None)
                     previous_volume = volume
-                    print(f"\rГромкость: {volume:3d}%", end="", flush=True)
+
+                print(f"\nГромкость: {volume:3d}%", end="", flush=True)
+                print(f"\nКнопка: {btn}")
     except KeyboardInterrupt:
         print("\nРабота завершена.")
         return 0
