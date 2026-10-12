@@ -65,6 +65,9 @@ class ConfigurationService:
         self._workspace = candidate
         return draft
 
+    def discard_draft(self) -> None:
+        self._repository.clear_draft()
+
     def discard_unsaved_and_exit(self) -> None:
         baseline = self._workspace.stored_configuration.baseline
         candidate = self._workspace.with_active(baseline)

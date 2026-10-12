@@ -149,6 +149,26 @@ def test_closing_main_window_hides_it_without_quitting(qtbot: QtBot) -> None:
     assert not main_window.is_visible()
 
 
+def test_activate_raises_and_activates_visible_window(
+    qtbot: QtBot,
+    monkeypatch,
+) -> None:
+    main_window = MainWindow(make_callbacks())
+    qtbot.addWidget(main_window.widget)
+    calls: list[str] = []
+    monkeypatch.setattr(main_window.widget, "raise_", lambda: calls.append("raise"))
+    monkeypatch.setattr(
+        main_window.widget,
+        "activateWindow",
+        lambda: calls.append("activate"),
+    )
+
+    main_window.activate()
+
+    assert main_window.is_visible()
+    assert calls == ["raise", "activate"]
+
+
 def test_render_displays_channels_sounds_and_presets_without_callbacks(
     qtbot: QtBot,
 ) -> None:

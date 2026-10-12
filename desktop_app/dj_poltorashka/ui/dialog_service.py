@@ -50,6 +50,16 @@ class DialogService:
         )
         return answer == QMessageBox.Yes
 
+    def ask_restore(self) -> bool:
+        answer = QMessageBox.question(
+            self._parent,
+            "Восстановление настройки",
+            "Восстановить несохранённую активную настройку?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        return answer == QMessageBox.Yes
+
     def ask_exit(self) -> ExitChoice:
         message = QMessageBox(self._parent)
         message.setWindowTitle("Несохранённая настройка")

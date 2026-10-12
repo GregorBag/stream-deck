@@ -188,6 +188,20 @@ def test_restore_draft_makes_it_active_and_persists_state() -> None:
     ]
 
 
+def test_discard_draft_removes_recovery_copy_without_changing_workspace() -> None:
+    baseline = make_panel(0.5)
+    draft = make_panel(0.8)
+    stored = make_stored_configuration(baseline, baseline)
+    repository = InMemoryRepository(stored=stored, draft=draft)
+    service = make_service(stored, repository)
+
+    service.discard_draft()
+
+    assert service.stored_configuration == stored
+    assert repository.draft is None
+    assert repository.operations == [("clear_draft", None)]
+
+
 def test_exit_without_saving_clears_draft_and_restores_baseline() -> None:
     baseline = make_panel(0.5)
     changed = make_panel(0.8)

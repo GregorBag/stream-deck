@@ -125,6 +125,11 @@ class MainWindow:
     def show(self) -> None:
         self._widget.show()
 
+    def activate(self) -> None:
+        self._widget.show()
+        self._widget.raise_()
+        self._widget.activateWindow()
+
     def hide(self) -> None:
         self._widget.hide()
 

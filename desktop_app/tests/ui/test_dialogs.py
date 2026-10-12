@@ -110,6 +110,23 @@ def test_confirm_overwrite_maps_question_answer(
     assert DialogService().confirm_overwrite("Работа") is expected
 
 
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    (
+        (QMessageBox.Yes, True),
+        (QMessageBox.No, False),
+    ),
+)
+def test_restore_question_maps_answer(
+    answer: QMessageBox.StandardButton,
+    expected: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: answer)
+
+    assert DialogService().ask_restore() is expected
+
+
 def test_closing_exit_dialog_is_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.NoButton)
 
