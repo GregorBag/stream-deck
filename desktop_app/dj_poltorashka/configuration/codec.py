@@ -13,7 +13,7 @@ from dj_poltorashka.configuration.models import (
 
 
 _SCHEMA_VERSION = 1
-_CHANNEL_KINDS = ("master", "application", "microphone")
+_CHANNEL_KINDS = ("unassigned", "master", "application", "microphone")
 
 
 def encode_panel_configuration(panel: PanelConfiguration) -> dict[str, object]:

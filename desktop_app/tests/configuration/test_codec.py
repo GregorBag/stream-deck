@@ -67,6 +67,28 @@ def test_panel_configuration_round_trip_preserves_all_fields() -> None:
     assert decoded == panel
 
 
+def test_unassigned_channel_round_trip_keeps_schema_version_one() -> None:
+    panel = PanelConfiguration(
+        channels=(
+            MixerChannelConfig("master", 1.0, False),
+            MixerChannelConfig("unassigned", 0.0, False),
+            MixerChannelConfig("unassigned", 0.0, False),
+            MixerChannelConfig("unassigned", 0.0, False),
+        ),
+        sound_buttons=tuple(SoundButtonConfig() for _ in range(8)),
+    )
+    stored = StoredConfiguration(
+        active=panel,
+        baseline=panel,
+        presets=(None, None, None),
+    )
+
+    encoded = encode_stored_configuration(stored)
+
+    assert encoded["schema_version"] == 1
+    assert decode_stored_configuration(encoded) == stored
+
+
 def test_decoder_rejects_unknown_schema_version() -> None:
     encoded = encode_stored_configuration(make_stored_configuration())
     encoded["schema_version"] = 2

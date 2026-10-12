@@ -62,7 +62,7 @@ def test_application_channel_requires_absolute_executable_path(
         )
 
 
-@pytest.mark.parametrize("channel_kind", ("master", "microphone"))
+@pytest.mark.parametrize("channel_kind", ("unassigned", "master", "microphone"))
 def test_non_application_channel_rejects_executable_path(channel_kind: str) -> None:
     with pytest.raises(ValueError):
         MixerChannelConfig(
@@ -71,6 +71,17 @@ def test_non_application_channel_rejects_executable_path(channel_kind: str) -> N
             muted=False,
             application_path=r"C:\Apps\Discord.exe",
         )
+
+
+def test_unassigned_channel_is_valid_without_application_path() -> None:
+    channel = MixerChannelConfig(
+        channel_kind="unassigned",
+        volume=0.0,
+        muted=False,
+    )
+
+    assert channel.channel_kind == "unassigned"
+    assert channel.application_path is None
 
 
 def test_executable_path_is_normalized_case_insensitively() -> None:

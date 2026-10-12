@@ -7,9 +7,9 @@ from pathlib import PureWindowsPath
 from typing import Literal
 
 
-ChannelKind = Literal["master", "application", "microphone"]
+ChannelKind = Literal["unassigned", "master", "application", "microphone"]
 
-_CHANNEL_KINDS = ("master", "application", "microphone")
+_CHANNEL_KINDS = ("unassigned", "master", "application", "microphone")
 _CHANNEL_COUNT = 4
 _SOUND_BUTTON_COUNT = 8
 _PRESET_COUNT = 3
