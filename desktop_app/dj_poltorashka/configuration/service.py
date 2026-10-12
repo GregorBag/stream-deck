@@ -39,8 +39,8 @@ class ConfigurationService:
     def save_active_to_preset(self, slot: int, name: str) -> PresetConfig:
         candidate = self._workspace.with_saved_preset(slot, name)
         self._repository.save(candidate.stored_configuration)
-        self._repository.clear_draft()
         self._workspace = candidate
+        self._repository.clear_draft()
 
         preset = candidate.stored_configuration.presets[slot - 1]
         if preset is None:
@@ -69,8 +69,8 @@ class ConfigurationService:
         baseline = self._workspace.stored_configuration.baseline
         candidate = self._workspace.with_active(baseline)
         self._repository.save(candidate.stored_configuration)
-        self._repository.clear_draft()
         self._workspace = candidate
+        self._repository.clear_draft()
 
     def referenced_sound_ids(self) -> set[str]:
         stored = self._workspace.stored_configuration

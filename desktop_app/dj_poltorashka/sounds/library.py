@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import ntpath
 import os
 from pathlib import Path
 import shutil
@@ -98,13 +99,16 @@ class SoundLibrary:
         if not self._sounds_dir.is_dir():
             return ()
 
+        normalized_references = {
+            ntpath.normcase(sound_id) for sound_id in referenced_ids
+        }
         removed_ids: list[str] = []
         for path in sorted(self._sounds_dir.iterdir(), key=lambda item: item.name):
             sound_id = path.name
             if (
                 path.is_file()
                 and self._is_valid_sound_id(sound_id)
-                and sound_id not in referenced_ids
+                and ntpath.normcase(sound_id) not in normalized_references
             ):
                 path.unlink()
                 removed_ids.append(sound_id)

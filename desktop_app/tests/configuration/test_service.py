@@ -20,6 +20,7 @@ class InMemoryRepository:
         self.saved_configuration = stored
         self.draft = draft
         self.fail_draft_save = False
+        self.fail_draft_clear = False
         self.operations: list[tuple[str, object | None]] = []
 
     def save(self, stored: StoredConfiguration) -> None:
@@ -38,6 +39,8 @@ class InMemoryRepository:
 
     def clear_draft(self) -> None:
         self.operations.append(("clear_draft", None))
+        if self.fail_draft_clear:
+            raise PermissionError("draft clear failed")
         self.draft = None
 
 
@@ -219,3 +222,41 @@ def test_referenced_sound_ids_include_active_presets_and_draft() -> None:
     sound_ids = service.referenced_sound_ids()
 
     assert sound_ids == {"active.mp3", "preset.wav", "draft.mp3"}
+
+
+def test_failed_draft_clear_keeps_saved_preset_in_service_state() -> None:
+    baseline = make_panel(0.5)
+    changed = make_panel(0.8)
+    stored = make_stored_configuration(changed, baseline)
+    repository = InMemoryRepository(stored=stored, draft=changed)
+    repository.fail_draft_clear = True
+    service = make_service(stored, repository)
+
+    with pytest.raises(PermissionError, match="draft clear failed"):
+        service.save_active_to_preset(1, "Первый")
+
+    assert service.stored_configuration == repository.saved_configuration
+    assert service.stored_configuration.presets[0] == PresetConfig("Первый", changed)
+
+    repository.fail_draft_clear = False
+    service.save_active_to_preset(2, "Второй")
+
+    assert repository.saved_configuration is not None
+    assert repository.saved_configuration.presets[0] == PresetConfig("Первый", changed)
+    assert repository.saved_configuration.presets[1] == PresetConfig("Второй", changed)
+
+
+def test_failed_draft_clear_after_discard_keeps_service_in_sync() -> None:
+    baseline = make_panel(0.5)
+    changed = make_panel(0.8)
+    stored = make_stored_configuration(changed, baseline)
+    repository = InMemoryRepository(stored=stored, draft=changed)
+    repository.fail_draft_clear = True
+    service = make_service(stored, repository)
+
+    with pytest.raises(PermissionError, match="draft clear failed"):
+        service.discard_unsaved_and_exit()
+
+    assert service.stored_configuration == repository.saved_configuration
+    assert service.stored_configuration.active == baseline
+    assert not service.is_dirty

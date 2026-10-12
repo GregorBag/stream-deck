@@ -93,3 +93,18 @@ def test_remove_unused_keeps_referenced_files(tmp_path: Path) -> None:
     assert kept.path.exists()
     assert library.resolve(kept.sound_id) == kept.path
     assert not removed.path.exists()
+
+
+def test_remove_unused_compares_references_case_insensitively(
+    tmp_path: Path,
+) -> None:
+    source = write_sound(tmp_path / "effect.mp3")
+    library = SoundLibrary(tmp_path / "library", id_factory=lambda: "abcdef")
+    imported = library.import_file(source)
+
+    assert library.resolve("ABCDEF.MP3") is not None
+
+    removed_ids = library.remove_unused({"ABCDEF.MP3"})
+
+    assert removed_ids == ()
+    assert imported.path.exists()
