@@ -6,9 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "dj-poltorashka-desktop"
 version = "0.1.0"
 requires-python = ">=3.12"
+dependencies = ["PySide6>=6.8,<7"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=8,<9", "pytest-qt>=4.4,<5"]
 
 [tool.setuptools.packages.find]
 where = ["."]
