@@ -89,6 +89,29 @@ def test_corrupt_draft_is_preserved_and_not_offered_for_restore(
     running.close()
 
 
+def test_restoring_valid_draft_does_not_overwrite_corrupt_configuration(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configuration_file = tmp_path / "configuration.json"
+    invalid_contents = "{not-json"
+    configuration_file.write_text(invalid_contents, encoding="utf-8")
+    source = bootstrap.build_application(tmp_path)
+    draft = source.configuration_service.stored_configuration.active
+    source.repository.save_draft(draft)
+    source.close()
+
+    running = bootstrap.build_application(tmp_path)
+    monkeypatch.setattr(running.dialogs, "ask_restore", lambda: True)
+    try:
+        running.controller.start(background=True, draft_available=True)
+
+        assert configuration_file.read_text(encoding="utf-8") == invalid_contents
+    finally:
+        running.close()
+
+
 class FakeApplication:
     def __init__(self) -> None:
         self.exec_count = 0
@@ -105,9 +128,12 @@ class FakeSingleInstance:
         self.listeners = []
         self.close_count = 0
         self.listen_error: RuntimeError | None = None
+        self.notify_results: list[bool] = []
 
     def notify_existing(self, command: str) -> bool:
         self.commands.append(command)
+        if self.notify_results:
+            return self.notify_results.pop(0)
         return self.existing
 
     def listen(self, on_command) -> None:
@@ -253,3 +279,18 @@ def test_single_instance_listen_error_is_shown_and_returns_failure(
     assert bootstrap.main([]) == 1
     assert running.dialogs.errors == [("Ошибка запуска", "listen failed")]
     assert running.close_count == 1
+
+
+def test_concurrent_first_instance_retries_notification(
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    running = FakeRunningApplication(existing=False)
+    running.single_instance.notify_results = [False, True]
+    running.single_instance.listen_error = RuntimeError("already running")
+    monkeypatch.setattr(bootstrap, "build_application", lambda: running)
+
+    assert bootstrap.main([]) == 0
+    assert running.single_instance.commands == ["show", "show"]
+    assert running.dialogs.errors == []
+    assert running.controller.starts == []

@@ -169,7 +169,7 @@ def test_failed_draft_save_prevents_preset_load_and_preserves_active_state() -> 
     assert [operation[0] for operation in repository.operations] == ["save_draft"]
 
 
-def test_restore_draft_makes_it_active_and_persists_state() -> None:
+def test_restore_draft_makes_it_active_without_persisting_main_state() -> None:
     baseline = make_panel(0.5)
     draft = make_panel(0.8)
     stored = make_stored_configuration(baseline, baseline)
@@ -181,11 +181,9 @@ def test_restore_draft_makes_it_active_and_persists_state() -> None:
     assert restored_panel == draft
     assert service.stored_configuration.active == draft
     assert service.is_dirty
-    assert repository.saved_configuration == service.stored_configuration
-    assert [operation[0] for operation in repository.operations] == [
-        "load_draft",
-        "save",
-    ]
+    assert repository.saved_configuration == stored
+    assert repository.draft == draft
+    assert repository.operations == [("load_draft", None)]
 
 
 def test_discard_draft_removes_recovery_copy_without_changing_workspace() -> None:

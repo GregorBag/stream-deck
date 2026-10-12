@@ -88,6 +88,22 @@ def test_invalid_json_raises_format_error_without_modifying_file(
     assert paths.configuration_file.read_bytes() == original_contents
 
 
+def test_first_write_after_corrupt_draft_preserves_original_backup(
+    tmp_path: Path,
+) -> None:
+    paths = ConfigurationPaths.under(tmp_path)
+    invalid_contents = b"[invalid"
+    paths.draft_file.write_bytes(invalid_contents)
+    repository = ConfigurationRepository(paths)
+
+    with pytest.raises(ValueError, match="draft.json"):
+        repository.load_draft()
+    repository.save_draft(make_panel(0.4))
+
+    assert (tmp_path / "draft.json.corrupt").read_bytes() == invalid_contents
+    assert repository.load_draft() == make_panel(0.4)
+
+
 def test_failed_replace_keeps_previous_configuration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

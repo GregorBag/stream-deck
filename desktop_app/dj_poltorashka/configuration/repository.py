@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 
 from dj_poltorashka.configuration.codec import (
@@ -44,19 +45,29 @@ class ConfigurationRepository:
         if not isinstance(paths, ConfigurationPaths):
             raise ValueError("Хранилищу требуется ConfigurationPaths")
         self._paths = paths
+        self._configuration_is_corrupt = False
+        self._draft_is_corrupt = False
 
     def load(self, default: StoredConfiguration) -> StoredConfiguration:
         if not self._paths.configuration_file.exists():
             return default
-        data = self._read_json(self._paths.configuration_file)
+        try:
+            data = self._read_json(self._paths.configuration_file)
+        except ValueError:
+            self._configuration_is_corrupt = True
+            raise
         try:
             return decode_stored_configuration(data)
         except ValueError as error:
+            self._configuration_is_corrupt = True
             raise ValueError(
                 f"{self._paths.configuration_file.name}: {error}"
             ) from error
 
     def save(self, stored: StoredConfiguration) -> None:
+        if self._configuration_is_corrupt:
+            self._preserve_corrupt(self._paths.configuration_file)
+            self._configuration_is_corrupt = False
         self._write_json(
             self._paths.configuration_file,
             encode_stored_configuration(stored),
@@ -65,20 +76,42 @@ class ConfigurationRepository:
     def load_draft(self) -> PanelConfiguration | None:
         if not self._paths.draft_file.exists():
             return None
-        data = self._read_json(self._paths.draft_file)
+        try:
+            data = self._read_json(self._paths.draft_file)
+        except ValueError:
+            self._draft_is_corrupt = True
+            raise
         try:
             return decode_panel_configuration(data)
         except ValueError as error:
+            self._draft_is_corrupt = True
             raise ValueError(f"{self._paths.draft_file.name}: {error}") from error
 
     def save_draft(self, panel: PanelConfiguration) -> None:
+        if self._draft_is_corrupt:
+            self._preserve_corrupt(self._paths.draft_file)
+            self._draft_is_corrupt = False
         self._write_json(
             self._paths.draft_file,
             encode_panel_configuration(panel),
         )
 
     def clear_draft(self) -> None:
+        if self._draft_is_corrupt:
+            self._preserve_corrupt(self._paths.draft_file)
+            self._draft_is_corrupt = False
         self._paths.draft_file.unlink(missing_ok=True)
+
+    @staticmethod
+    def _preserve_corrupt(path: Path) -> None:
+        if not path.exists():
+            return
+        backup = path.with_name(f"{path.name}.corrupt")
+        suffix = 1
+        while backup.exists():
+            backup = path.with_name(f"{path.name}.corrupt.{suffix}")
+            suffix += 1
+        shutil.copy2(path, backup)
 
     @staticmethod
     def _read_json(path: Path) -> object:

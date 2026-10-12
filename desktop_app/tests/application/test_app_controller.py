@@ -272,6 +272,19 @@ def test_failed_sound_import_reports_error_and_keeps_state(tmp_path: Path) -> No
     assert_views_show_service_state(context)
 
 
+def test_cancelled_application_selection_restores_actual_view_state(
+    tmp_path: Path,
+) -> None:
+    context = ControllerContext(tmp_path)
+    original = context.service.stored_configuration
+    context.dialogs.application_path = None
+
+    context.controller.set_channel(1, "application")
+
+    assert context.service.stored_configuration == original
+    assert_views_show_service_state(context)
+
+
 @pytest.mark.parametrize(
     ("background", "expected_window_count"),
     ((False, 1), (True, 0)),

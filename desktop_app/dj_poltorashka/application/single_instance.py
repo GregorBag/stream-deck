@@ -3,8 +3,10 @@
 from collections.abc import Callable
 import getpass
 import hashlib
+from pathlib import Path
+import tempfile
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, QLockFile, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 
@@ -27,6 +29,10 @@ class SingleInstanceController:
         self._clients: dict[QLocalSocket, bytearray] = {}
         self._outgoing_socket: QLocalSocket | None = None
         self._probe_failed = False
+        lock_id = hashlib.sha256(self._server_name.encode("utf-8")).hexdigest()
+        lock_path = Path(tempfile.gettempdir()) / f"dj-poltorashka-{lock_id}.lock"
+        self._lock_file = QLockFile(str(lock_path))
+        self._has_lock = False
 
     @property
     def server_name(self) -> str:
@@ -82,15 +88,22 @@ class SingleInstanceController:
         return socket.bytesToWrite() == 0
 
     def listen(self, on_command: Callable[[str], None]) -> None:
+        if not self._has_lock:
+            if not self._lock_file.tryLock(0):
+                raise RuntimeError("Приложение уже запущено")
+            self._has_lock = True
         self._on_command = on_command
         if self._server.listen(self._server_name):
             return
 
         if not self._probe_failed:
+            self._release_lock()
             raise RuntimeError(self._server.errorString())
         if not QLocalServer.removeServer(self._server_name):
+            self._release_lock()
             raise RuntimeError("Не удалось удалить устаревшее имя сервера")
         if not self._server.listen(self._server_name):
+            self._release_lock()
             raise RuntimeError(self._server.errorString())
 
     def close(self) -> None:
@@ -101,6 +114,12 @@ class SingleInstanceController:
             socket.abort()
         self._clients.clear()
         self._server.close()
+        self._release_lock()
+
+    def _release_lock(self) -> None:
+        if self._has_lock:
+            self._lock_file.unlock()
+            self._has_lock = False
 
     def _accept_connections(self) -> None:
         while self._server.hasPendingConnections():

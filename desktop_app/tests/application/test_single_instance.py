@@ -81,3 +81,20 @@ def test_failed_probe_allows_stale_server_name_removal(
 
     assert removed == [name]
     controller.close()
+
+
+def test_only_one_concurrent_controller_can_become_server(qtbot: QtBot) -> None:
+    name = unique_server_name()
+    first = SingleInstanceController(name)
+    second = SingleInstanceController(name)
+
+    assert not first.notify_existing("ping")
+    assert not second.notify_existing("ping")
+    first.listen(lambda command: None)
+
+    with pytest.raises(RuntimeError, match="уже запущен"):
+        second.listen(lambda command: None)
+    assert second.notify_existing("ping")
+
+    second.close()
+    first.close()

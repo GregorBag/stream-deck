@@ -88,6 +88,7 @@ class AppController:
         if channel_kind == "application":
             selected_path = self._dialogs.choose_application_file()
             if selected_path is None:
+                self._refresh()
                 return
             application_path = str(selected_path)
             display_name = Path(selected_path).stem

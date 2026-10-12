@@ -61,7 +61,6 @@ class ConfigurationService:
             raise LookupError("Черновик отсутствует")
 
         candidate = self._workspace.with_restored_draft(draft)
-        self._repository.save(candidate.stored_configuration)
         self._workspace = candidate
         return draft
 

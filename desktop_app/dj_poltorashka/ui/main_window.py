@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
@@ -126,6 +127,9 @@ class MainWindow:
         self._widget.show()
 
     def activate(self) -> None:
+        if self._widget.isMinimized():
+            state = self._widget.windowState() & ~Qt.WindowMinimized
+            self._widget.setWindowState(state)
         self._widget.show()
         self._widget.raise_()
         self._widget.activateWindow()

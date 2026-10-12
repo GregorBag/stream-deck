@@ -169,6 +169,18 @@ def test_activate_raises_and_activates_visible_window(
     assert calls == ["raise", "activate"]
 
 
+def test_activate_restores_minimized_window(qtbot: QtBot) -> None:
+    main_window = MainWindow(make_callbacks())
+    qtbot.addWidget(main_window.widget)
+    main_window.show()
+    main_window.widget.showMinimized()
+    assert main_window.widget.isMinimized()
+
+    main_window.activate()
+
+    assert not main_window.widget.isMinimized()
+
+
 def test_render_displays_channels_sounds_and_presets_without_callbacks(
     qtbot: QtBot,
 ) -> None:

@@ -205,6 +205,15 @@ def main(arguments: Sequence[str] | None = None) -> int:
         running.single_instance.listen(
             running.controller.handle_instance_command
         )
+    except Exception as error:
+        if running.single_instance.notify_existing(command):
+            running.close()
+            return 0
+        running.dialogs.show_error("Ошибка запуска", str(error))
+        running.close()
+        return 1
+
+    try:
         for title, message in running.startup_errors:
             running.dialogs.show_error(title, message)
         running.controller.start(
