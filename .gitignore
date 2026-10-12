@@ -1,2 +1,8 @@
 .pio
 .vscode
+.superpowers/
+desktop_app/.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
