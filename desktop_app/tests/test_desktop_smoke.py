@@ -23,6 +23,44 @@ class FakeSoundPlayerFactory:
         pass
 
 
+class FakeDeviceRegistry:
+    def inputs(self) -> tuple[object, ...]:
+        return ()
+
+    def outputs(self) -> tuple[object, ...]:
+        return ()
+
+    def close(self) -> None:
+        pass
+
+
+class FakeRoutingService:
+    instances: list["FakeRoutingService"] = []
+
+    def __init__(self, registry, settings, on_status) -> None:
+        self.start_count = 0
+        self.close_count = 0
+        self.instances.append(self)
+
+    def start(self) -> None:
+        self.start_count += 1
+
+    def apply(self, settings) -> None:
+        pass
+
+    def monitor_device(self):
+        return None
+
+    def cable_device(self):
+        return None
+
+    def report_pipeline_error(self, message: str) -> None:
+        pass
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
 def test_desktop_configuration_round_trip(
     qtbot: QtBot,
     tmp_path: Path,
@@ -34,6 +72,9 @@ def test_desktop_configuration_round_trip(
         "QtSoundPlayerFactory",
         FakeSoundPlayerFactory,
     )
+    FakeRoutingService.instances.clear()
+    monkeypatch.setattr(bootstrap, "QtAudioDeviceRegistry", FakeDeviceRegistry)
+    monkeypatch.setattr(bootstrap, "AudioRoutingService", FakeRoutingService)
     running = bootstrap.build_application(tmp_path)
     qtbot.addWidget(running.main_window.widget)
     qtbot.addWidget(running.simulator.widget)
@@ -69,3 +110,7 @@ def test_desktop_configuration_round_trip(
         assert saved["presets"][0]["panel"] == saved["active"]
     finally:
         running.close()
+
+    routing = FakeRoutingService.instances[-1]
+    assert routing.start_count == 1
+    assert routing.close_count == 1

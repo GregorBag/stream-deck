@@ -26,7 +26,7 @@ def filter_windows_binaries(
 
 
 def verify_windows_bundle(bundle_root: Path) -> None:
-    """Проверяет, что сборка не содержит несовместимую ICU."""
+    """Проверяет ICU и обязательные плагины Qt Multimedia."""
 
     forbidden = sorted(
         path.relative_to(bundle_root)
@@ -36,6 +36,24 @@ def verify_windows_bundle(bundle_root: Path) -> None:
     if forbidden:
         names = ", ".join(str(path) for path in forbidden)
         raise RuntimeError(f"Сборка содержит внешние ICU DLL: {names}")
+
+    available_names = {
+        path.name.casefold()
+        for path in bundle_root.rglob("*.dll")
+        if path.is_file()
+    }
+    required_plugins = (
+        "ffmpegmediaplugin.dll",
+        "windowsmediaplugin.dll",
+    )
+    missing = tuple(
+        plugin for plugin in required_plugins if plugin not in available_names
+    )
+    if missing:
+        raise RuntimeError(
+            "В сборке отсутствуют плагины Qt Multimedia: "
+            + ", ".join(missing)
+        )
 
 
 def main(arguments: list[str] | None = None) -> int:
