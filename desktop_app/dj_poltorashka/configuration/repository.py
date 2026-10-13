@@ -23,6 +23,7 @@ class ConfigurationPaths:
     root: Path
     configuration_file: Path
     draft_file: Path
+    settings_file: Path
     sounds_dir: Path
     logs_dir: Path
 
@@ -33,6 +34,7 @@ class ConfigurationPaths:
             root=root_path,
             configuration_file=root_path / "configuration.json",
             draft_file=root_path / "draft.json",
+            settings_file=root_path / "settings.json",
             sounds_dir=root_path / "sounds",
             logs_dir=root_path / "logs",
         )

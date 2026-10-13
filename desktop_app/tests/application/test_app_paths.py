@@ -20,6 +20,7 @@ def test_explicit_root_bypasses_qstandardpaths(
     assert paths.root == tmp_path / "custom"
     assert paths.configuration_file == tmp_path / "custom" / "configuration.json"
     assert paths.draft_file == tmp_path / "custom" / "draft.json"
+    assert paths.settings_file == tmp_path / "custom" / "settings.json"
     assert paths.sounds_dir == tmp_path / "custom" / "sounds"
     assert paths.logs_dir == tmp_path / "custom" / "logs"
 
@@ -50,3 +51,9 @@ def test_empty_qstandardpaths_location_is_rejected(
 
     with pytest.raises(RuntimeError, match="каталог данных"):
         resolve_configuration_paths()
+
+
+def test_configuration_paths_include_settings_file(tmp_path: Path) -> None:
+    paths = resolve_configuration_paths(tmp_path)
+
+    assert paths.settings_file == tmp_path / "settings.json"
