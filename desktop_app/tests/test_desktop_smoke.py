@@ -22,6 +22,9 @@ class FakeSoundPlayerFactory:
     def __init__(self, *args, **kwargs) -> None:
         pass
 
+    def update_mix_gains(self) -> None:
+        pass
+
 
 class FakeDeviceRegistry:
     def inputs(self) -> tuple[object, ...]:
@@ -55,6 +58,9 @@ class FakeRoutingService:
         return None
 
     def report_pipeline_error(self, message: str) -> None:
+        pass
+
+    def report_pipeline_active(self) -> None:
         pass
 
     def close(self) -> None:

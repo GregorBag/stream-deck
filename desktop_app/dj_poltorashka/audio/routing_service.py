@@ -43,6 +43,8 @@ class AudioRoutingService:
         self._closed = False
         self._refreshing = False
         self._pending_relay_status: AudioRoutingStatus | None = None
+        self._relay_status: AudioRoutingStatus | None = None
+        self._playback_error: str | None = None
 
     @property
     def status(self) -> AudioRoutingStatus:
@@ -81,6 +83,7 @@ class AudioRoutingService:
         ).microphone
         self._refreshing = True
         self._pending_relay_status = None
+        self._relay_status = None
         try:
             if not self._relay_started:
                 self._relay.start(
@@ -97,13 +100,9 @@ class AudioRoutingService:
                 )
         finally:
             self._refreshing = False
-        if (
-            self._pending_relay_status is not None
-            and self._pending_relay_status.code == "pipeline_error"
-        ):
-            self._set_status(self._pending_relay_status)
-        else:
-            self._set_status(self._device_status(snapshot))
+        if self._pending_relay_status is not None:
+            self._relay_status = self._pending_relay_status
+        self._publish_combined_status()
 
     def monitor_device(self) -> object | None:
         return self._snapshot.monitor_device
@@ -113,12 +112,12 @@ class AudioRoutingService:
 
     def report_pipeline_error(self, message: str) -> None:
         normalized = message.strip() if isinstance(message, str) else ""
-        self._set_status(
-            AudioRoutingStatus(
-                "pipeline_error",
-                f"Ошибка аудиопотока: {normalized or 'неизвестная ошибка'}",
-            )
-        )
+        self._playback_error = normalized or "неизвестная ошибка"
+        self._publish_combined_status()
+
+    def report_pipeline_active(self) -> None:
+        self._playback_error = None
+        self._publish_combined_status()
 
     def close(self) -> None:
         if self._closed:
@@ -133,10 +132,34 @@ class AudioRoutingService:
         if self._refreshing:
             self._pending_relay_status = status
             return
-        if status.code == "pipeline_error":
-            self._set_status(status)
-        else:
-            self._set_status(self._device_status(self._snapshot))
+        self._relay_status = status
+        self._publish_combined_status()
+
+    def _publish_combined_status(self) -> None:
+        device_status = self._device_status(self._snapshot)
+        if device_status.code != "active":
+            self._set_status(device_status)
+            return
+        if self._relay_status is not None and self._relay_status.code != "active":
+            self._set_status(self._relay_status)
+            return
+        if self._playback_error is not None:
+            self._set_status(
+                AudioRoutingStatus(
+                    "pipeline_error",
+                    f"Ошибка аудиопотока: {self._playback_error}",
+                )
+            )
+            return
+        if self._relay_status is None:
+            self._set_status(
+                AudioRoutingStatus(
+                    "pipeline_error",
+                    "Виртуальный микрофон запускается",
+                )
+            )
+            return
+        self._set_status(device_status)
 
     def _set_status(self, status: AudioRoutingStatus) -> None:
         if status == self._status:

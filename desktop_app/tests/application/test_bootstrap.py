@@ -59,6 +59,9 @@ class RecordingSoundPlayerFactory:
         self.arguments = args
         self.keyword_arguments = kwargs
 
+    def update_mix_gains(self) -> None:
+        pass
+
 
 class RecordingSoundPlayback:
     instances: list["RecordingSoundPlayback"] = []
@@ -253,6 +256,9 @@ class RecordingRoutingService:
     def report_pipeline_error(self, message: str) -> None:
         return None
 
+    def report_pipeline_active(self) -> None:
+        return None
+
     def close(self) -> None:
         self.close_count += 1
         self.registry.close()
@@ -297,6 +303,23 @@ def test_corrupt_configuration_is_preserved_and_default_is_loaded(
     assert running.startup_errors == (
         ("Конфигурация", "configuration.json: некорректный JSON в строке 1"),
     )
+    running.close()
+
+
+def test_corrupt_routing_settings_are_preserved_and_defaults_are_loaded(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    settings_file = tmp_path / "settings.json"
+    invalid_contents = "{not-json"
+    settings_file.write_text(invalid_contents, encoding="utf-8")
+
+    running = bootstrap.build_application(tmp_path)
+
+    assert settings_file.read_text(encoding="utf-8") == invalid_contents
+    assert len(running.startup_errors) == 1
+    assert running.startup_errors[0][0] == "Виртуальный микрофон"
+    assert running.startup_errors[0][1].startswith("settings.json:")
     running.close()
 
 

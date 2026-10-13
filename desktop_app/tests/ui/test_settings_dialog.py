@@ -104,3 +104,15 @@ def test_dialog_displays_every_virtual_microphone_status(qtbot: QtBot) -> None:
         dialog.set_virtual_microphone_status(state)
         assert label.text() == state.message
         assert label.property("status_code") == state.code
+
+
+def test_missing_selected_device_remains_visible_and_selected(qtbot: QtBot) -> None:
+    dialog, controller = make_dialog(qtbot)
+    controller.settings = AudioRoutingSettings("disconnected", None, 0.4, 0.7)
+
+    dialog.open()
+
+    input_combo = dialog.widget.findChild(QComboBox, "input_device_combo")
+    assert input_combo.currentData() == "disconnected"
+    assert input_combo.currentText() == "Недоступно — disconnected"
+    assert controller.input_values == []

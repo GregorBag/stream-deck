@@ -121,10 +121,19 @@ def test_relay_pump_discards_stale_excess_under_backpressure() -> None:
     assert source.bytesAvailable() == 0
 
 
+def test_relay_pump_writes_only_complete_pcm_frames() -> None:
+    source = FakeReadable(b"0123456789")
+    sink = FakeWritable(7)
+
+    AudioRelayPump(source, sink, period_bytes=9, bytes_per_frame=4).forward()
+
+    assert sink.writes == [b"4567"]
+
+
 class FakeRuntime:
-    def __init__(self, on_error: object) -> None:
-        self.on_error = on_error
-        self.apply_calls: list[tuple[object, object, QAudioFormat, float]] = []
+    def __init__(self, on_event: object) -> None:
+        self.on_event = on_event
+        self.apply_calls: list[tuple[object, object, QAudioFormat, float, int]] = []
         self.stop_count = 0
         self.close_count = 0
 
@@ -134,8 +143,11 @@ class FakeRuntime:
         cable_device: object,
         audio_format: QAudioFormat,
         volume: float,
+        generation: int,
     ) -> None:
-        self.apply_calls.append((input_device, cable_device, audio_format, volume))
+        self.apply_calls.append(
+            (input_device, cable_device, audio_format, volume, generation)
+        )
 
     def stop(self) -> None:
         self.stop_count += 1
@@ -190,6 +202,7 @@ def test_coordinator_reconfigures_devices_and_closes_idempotently() -> None:
 
     coordinator.start(first_input, cable, 0.4)
     coordinator.apply(second_input, cable, 0.8)
+    runtime_holder[0].on_event(2, None)  # type: ignore[operator]
     coordinator.close()
     coordinator.close()
 
@@ -198,6 +211,29 @@ def test_coordinator_reconfigures_devices_and_closes_idempotently() -> None:
     assert [call[3] for call in runtime.apply_calls] == [0.4, 0.8]
     assert [status.code for status in statuses] == ["active"]
     assert runtime.close_count == 1
+
+
+def test_coordinator_ignores_stale_runtime_events() -> None:
+    statuses: list[AudioRoutingStatus] = []
+    runtime_holder: list[FakeRuntime] = []
+
+    def factory(on_event: object) -> FakeRuntime:
+        runtime = FakeRuntime(on_event)
+        runtime_holder.append(runtime)
+        return runtime
+
+    first_input, cable = make_compatible_devices()
+    second_input, _ = make_compatible_devices()
+    coordinator = VirtualMicrophoneCoordinator(statuses.append, factory)
+
+    coordinator.start(first_input, cable, 0.4)
+    coordinator.apply(second_input, cable, 0.8)
+    runtime = runtime_holder[0]
+    runtime.on_event(1, None)  # type: ignore[operator]
+    runtime.on_event(2, None)  # type: ignore[operator]
+    runtime.on_event(1, "late failure")  # type: ignore[operator]
+
+    assert [status.code for status in statuses] == ["active"]
 
 
 class FakeSignal:
@@ -265,8 +301,12 @@ def test_active_qt_runtime_closes_worker_thread(qtbot: QtBot) -> None:
         sinks.append(sink)
         return sink
 
-    runtime = QtRelayRuntime(lambda message: None, source_factory, sink_factory)
-    runtime.apply(object(), object(), make_format(48000), 0.35)
+    runtime = QtRelayRuntime(
+        lambda generation, message: None,
+        source_factory,
+        sink_factory,
+    )
+    runtime.apply(object(), object(), make_format(48000), 0.35, 1)
     qtbot.waitUntil(lambda: bool(sources) and bool(sinks))
 
     runtime.close()
@@ -277,3 +317,23 @@ def test_active_qt_runtime_closes_worker_thread(qtbot: QtBot) -> None:
     assert sources[0].stopped
     assert sinks[0].stopped
     assert not runtime.is_running
+
+
+def test_qt_runtime_delivers_errors_on_owner_thread(qtbot: QtBot) -> None:
+    callback_threads: list[QThread] = []
+
+    def fail_source(device: object, audio_format: QAudioFormat) -> object:
+        raise RuntimeError("source failed")
+
+    runtime = QtRelayRuntime(
+        lambda generation, message: callback_threads.append(QThread.currentThread()),
+        fail_source,
+        FakeSink,
+    )
+    try:
+        runtime.apply(object(), object(), make_format(48000), 0.35, 1)
+        qtbot.waitUntil(lambda: bool(callback_threads))
+
+        assert callback_threads == [QThread.currentThread()]
+    finally:
+        runtime.close()

@@ -136,6 +136,9 @@ class SettingsDialog:
                 text = f"{text} — {device.device_id}"
             combo.addItem(text, device.device_id)
         selected_index = combo.findData(selected_id)
+        if selected_id is not None and selected_index < 0:
+            combo.addItem(f"Недоступно — {selected_id}", selected_id)
+            selected_index = combo.count() - 1
         combo.setCurrentIndex(selected_index if selected_index >= 0 else 0)
 
     def _set_input_device(self, index: int) -> None:

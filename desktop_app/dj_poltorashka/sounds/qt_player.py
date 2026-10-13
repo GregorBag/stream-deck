@@ -21,6 +21,7 @@ class QtSoundPlayerFactory:
         cable_device_provider: Callable[[], object | None] | None = None,
         mix_gains_provider: Callable[[], tuple[float, float]] | None = None,
         on_routing_error: Callable[[str], None] | None = None,
+        on_routing_active: Callable[[], None] | None = None,
     ) -> None:
         self._media_devices = media_devices or QMediaDevices()
         self._media_player_type = media_player_type
@@ -31,6 +32,7 @@ class QtSoundPlayerFactory:
         self._cable_device_provider = cable_device_provider or (lambda: None)
         self._mix_gains_provider = mix_gains_provider or (lambda: (1.0, 1.0))
         self._on_routing_error = on_routing_error or (lambda message: None)
+        self._on_routing_active = on_routing_active or (lambda: None)
         self._players: set[_PairedQtSoundPlayer] = set()
         self._virtual_players: set[_PairedQtSoundPlayer] = set()
         self._media_devices.audioOutputsChanged.connect(self._update_outputs)
@@ -50,11 +52,15 @@ class QtSoundPlayerFactory:
             on_finished,
             on_error,
             self._on_routing_error,
+            self._on_routing_active,
             self._set_virtual_active,
             self._discard,
         )
         self._players.add(player)
         return player
+
+    def update_mix_gains(self) -> None:
+        self._update_virtual_volumes()
 
     def _update_outputs(self) -> None:
         monitor = self._monitor_device_provider()
@@ -166,12 +172,14 @@ class _PairedQtSoundPlayer:
         on_finished: Callable[[], None],
         on_error: Callable[[str], None],
         on_routing_error: Callable[[str], None],
+        on_routing_active: Callable[[], None],
         on_virtual_state: Callable[["_PairedQtSoundPlayer", bool], None],
         on_closed: Callable[["_PairedQtSoundPlayer"], None],
     ) -> None:
         self._on_finished = on_finished
         self._on_error = on_error
         self._on_routing_error = on_routing_error
+        self._on_routing_active = on_routing_active
         self._on_virtual_state = on_virtual_state
         self._on_closed = on_closed
         self._closed = False
@@ -204,6 +212,7 @@ class _PairedQtSoundPlayer:
                     self._started_roles.add(role)
                     if role == "virtual":
                         self._on_virtual_state(self, True)
+                        self._on_routing_active()
             except Exception as error:
                 message = str(error).strip() or type(error).__name__
                 self._failed_messages.append(message)

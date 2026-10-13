@@ -54,25 +54,36 @@ def select_relay_format(input_device: object, cable_device: object) -> QAudioFor
 class AudioRelayPump:
     """Переносит только свежий ограниченный блок PCM-данных."""
 
-    def __init__(self, source: object, sink: object, period_bytes: int):
+    def __init__(
+        self,
+        source: object,
+        sink: object,
+        period_bytes: int,
+        bytes_per_frame: int = 1,
+    ):
         if period_bytes <= 0:
             raise ValueError("Размер периода должен быть положительным")
+        if bytes_per_frame <= 0:
+            raise ValueError("Размер PCM-кадра должен быть положительным")
         self._source = source
         self._sink = sink
         self._period_bytes = period_bytes
+        self._bytes_per_frame = bytes_per_frame
 
     def forward(self) -> None:
         available = max(0, int(self._source.bytesAvailable()))  # type: ignore[attr-defined]
         if available == 0:
             return
         data = bytes(self._source.read(available))  # type: ignore[attr-defined]
+        usable = len(data) - len(data) % self._bytes_per_frame
         writable = min(
-            len(data),
+            usable,
             max(0, int(self._sink.bytesFree())),  # type: ignore[attr-defined]
             self._period_bytes,
         )
+        writable -= writable % self._bytes_per_frame
         if writable > 0:
-            self._sink.write(data[-writable:])  # type: ignore[attr-defined]
+            self._sink.write(data[usable - writable:usable])  # type: ignore[attr-defined]
 
 
 class RelayRuntime(Protocol):
@@ -82,6 +93,7 @@ class RelayRuntime(Protocol):
         cable_device: object,
         audio_format: QAudioFormat,
         volume: float,
+        generation: int,
     ) -> None:
         ...
 
@@ -93,7 +105,8 @@ class RelayRuntime(Protocol):
 
 
 class _RelayWorker(QObject):
-    error = Signal(str)
+    configured = Signal(int)
+    error = Signal(int, str)
 
     def __init__(
         self,
@@ -108,15 +121,18 @@ class _RelayWorker(QObject):
         self._source_io: object | None = None
         self._sink_io: object | None = None
         self._pump: AudioRelayPump | None = None
+        self._generation = 0
 
-    @Slot(object, object, object, float)
+    @Slot(object, object, object, float, int)
     def configure(
         self,
         input_device: object,
         cable_device: object,
         audio_format: QAudioFormat,
         volume: float,
+        generation: int,
     ) -> None:
+        self._generation = generation
         self.stop()
         try:
             source = self._source_factory(input_device, audio_format)
@@ -132,10 +148,16 @@ class _RelayWorker(QObject):
             self._sink = sink
             self._source_io = source_io
             self._sink_io = sink_io
-            self._pump = AudioRelayPump(source_io, sink_io, period_bytes)
+            self._pump = AudioRelayPump(
+                source_io,
+                sink_io,
+                period_bytes,
+                audio_format.bytesPerFrame(),
+            )
             source_io.readyRead.connect(self._forward)  # type: ignore[attr-defined]
             self._connect_state_signal(source)
             self._connect_state_signal(sink)
+            self.configured.emit(generation)
         except Exception as error:
             self.stop()
             self._emit_error(error)
@@ -184,13 +206,34 @@ class _RelayWorker(QObject):
             signal.connect(self._check_state)
 
     def _emit_error(self, error: Exception) -> None:
-        self.error.emit(str(error).strip() or type(error).__name__)
+        self.error.emit(
+            self._generation,
+            str(error).strip() or type(error).__name__,
+        )
 
 
 class _RelayBridge(QObject):
-    configure_requested = Signal(object, object, object, float)
+    configure_requested = Signal(object, object, object, float, int)
     stop_requested = Signal()
     shutdown_requested = Signal()
+
+
+class _RelayEventReceiver(QObject):
+    def __init__(
+        self,
+        on_event: Callable[[int, str | None], None],
+        parent: QObject,
+    ) -> None:
+        super().__init__(parent)
+        self._on_event = on_event
+
+    @Slot(int)
+    def handle_configured(self, generation: int) -> None:
+        self._on_event(generation, None)
+
+    @Slot(int, str)
+    def handle_error(self, generation: int, message: str) -> None:
+        self._on_event(generation, message)
 
 
 class QtRelayRuntime(QObject):
@@ -198,19 +241,21 @@ class QtRelayRuntime(QObject):
 
     def __init__(
         self,
-        on_error: Callable[[str], None],
+        on_event: Callable[[int, str | None], None],
         source_factory: Callable[[object, QAudioFormat], object] = QAudioSource,
         sink_factory: Callable[[object, QAudioFormat], object] = QAudioSink,
     ) -> None:
         super().__init__()
         self._thread = QThread(self)
         self._bridge = _RelayBridge(self)
+        self._event_receiver = _RelayEventReceiver(on_event, self)
         self._worker = _RelayWorker(source_factory, sink_factory)
         self._worker.moveToThread(self._thread)
         self._bridge.configure_requested.connect(self._worker.configure)
         self._bridge.stop_requested.connect(self._worker.stop)
         self._bridge.shutdown_requested.connect(self._worker.shutdown)
-        self._worker.error.connect(on_error)
+        self._worker.configured.connect(self._event_receiver.handle_configured)
+        self._worker.error.connect(self._event_receiver.handle_error)
         self._thread.finished.connect(self._worker.deleteLater)
         self._closed = False
 
@@ -224,6 +269,7 @@ class QtRelayRuntime(QObject):
         cable_device: object,
         audio_format: QAudioFormat,
         volume: float,
+        generation: int,
     ) -> None:
         if self._closed:
             return
@@ -234,6 +280,7 @@ class QtRelayRuntime(QObject):
             cable_device,
             audio_format,
             volume,
+            generation,
         )
 
     def stop(self) -> None:
@@ -255,12 +302,16 @@ class VirtualMicrophoneCoordinator:
     def __init__(
         self,
         on_status: Callable[[AudioRoutingStatus], None],
-        runtime_factory: Callable[[Callable[[str], None]], RelayRuntime] = QtRelayRuntime,
+        runtime_factory: Callable[
+            [Callable[[int, str | None], None]],
+            RelayRuntime,
+        ] = QtRelayRuntime,
     ) -> None:
         self._on_status = on_status
-        self._runtime = runtime_factory(self._handle_runtime_error)
+        self._runtime = runtime_factory(self._handle_runtime_event)
         self._status: AudioRoutingStatus | None = None
         self._closed = False
+        self._generation = 0
 
     def start(
         self,
@@ -279,6 +330,7 @@ class VirtualMicrophoneCoordinator:
         if self._closed:
             return
         self._validate_volume(volume)
+        self._generation += 1
         if input_device is None:
             self._runtime.stop()
             self._set_status("microphone_missing", "Микрофон недоступен")
@@ -292,8 +344,13 @@ class VirtualMicrophoneCoordinator:
             self._runtime.stop()
             self._set_status("pipeline_error", "Нет общего PCM-формата")
             return
-        self._runtime.apply(input_device, cable_device, audio_format, volume)
-        self._set_status("active", "Виртуальный микрофон активен")
+        self._runtime.apply(
+            input_device,
+            cable_device,
+            audio_format,
+            volume,
+            self._generation,
+        )
 
     def close(self) -> None:
         if self._closed:
@@ -301,8 +358,13 @@ class VirtualMicrophoneCoordinator:
         self._closed = True
         self._runtime.close()
 
-    def _handle_runtime_error(self, message: str) -> None:
-        self._set_status("pipeline_error", f"Ошибка аудиопотока: {message}")
+    def _handle_runtime_event(self, generation: int, message: str | None) -> None:
+        if generation != self._generation or self._closed:
+            return
+        if message is None:
+            self._set_status("active", "Виртуальный микрофон активен")
+        else:
+            self._set_status("pipeline_error", f"Ошибка аудиопотока: {message}")
 
     def _set_status(self, code: str, message: str) -> None:
         status = AudioRoutingStatus(code, message)  # type: ignore[arg-type]

@@ -151,6 +151,52 @@ def test_simultaneous_virtual_players_share_sound_bus(tmp_path: Path) -> None:
     assert [output.volumes[-1] for output in virtual_outputs] == [0.25, 0.25]
 
 
+def test_active_virtual_players_apply_changed_sound_gain(tmp_path: Path) -> None:
+    gains = [1.0, 1.0]
+    FakeAudioOutput.instances.clear()
+    FakeMediaPlayer.instances.clear()
+    factory = QtSoundPlayerFactory(
+        FakeMediaDevices(),
+        media_player_type=FakeMediaPlayer,
+        audio_output_type=FakeAudioOutput,
+        monitor_device_provider=lambda: "headphones",
+        cable_device_provider=lambda: "cable",
+        mix_gains_provider=lambda: (gains[0], gains[1]),
+    )
+    player = factory.create(
+        tmp_path / "sound.wav", lambda: None, lambda message: None
+    )
+    player.start()
+    virtual_output = next(
+        output for output in FakeAudioOutput.instances if output.device == "cable"
+    )
+
+    gains[1] = 0.2
+    factory.update_mix_gains()
+
+    assert virtual_output.volumes[-1] == 0.1
+
+
+def test_successful_virtual_start_reports_routing_recovery(tmp_path: Path) -> None:
+    recoveries: list[str] = []
+    FakeAudioOutput.instances.clear()
+    FakeMediaPlayer.instances.clear()
+    factory = QtSoundPlayerFactory(
+        FakeMediaDevices(),
+        media_player_type=FakeMediaPlayer,
+        audio_output_type=FakeAudioOutput,
+        monitor_device_provider=lambda: "headphones",
+        cable_device_provider=lambda: "cable",
+        on_routing_active=lambda: recoveries.append("active"),
+    )
+
+    factory.create(
+        tmp_path / "sound.wav", lambda: None, lambda message: None
+    ).start()
+
+    assert recoveries == ["active"]
+
+
 def test_virtual_failure_keeps_monitor_and_reports_routing_error(tmp_path: Path) -> None:
     routing_errors: list[str] = []
     playback_errors: list[str] = []

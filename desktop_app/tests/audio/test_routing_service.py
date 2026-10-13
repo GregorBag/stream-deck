@@ -34,6 +34,7 @@ class FakeRelay:
         self.on_status = on_status
         self.calls: list[tuple[object | None, object | None, float]] = []
         self.close_count = 0
+        self.report_active = True
 
     def start(self, input_device: object, cable_device: object, volume: float) -> None:
         self.apply(input_device, cable_device, volume)
@@ -45,6 +46,10 @@ class FakeRelay:
         volume: float,
     ) -> None:
         self.calls.append((input_device, cable_device, volume))
+        if self.report_active:
+            self.on_status(  # type: ignore[operator]
+                AudioRoutingStatus("active", "Виртуальный микрофон активен")
+            )
 
     def close(self) -> None:
         self.close_count += 1
@@ -148,3 +153,31 @@ def test_apply_refresh_and_close_are_safe_during_rapid_changes() -> None:
     assert relay.calls[-1] == ("usb-microphone", "cable-input", 0.3)
     assert relay.close_count == 1
     assert registry.close_count == 1
+
+
+def test_successful_playback_clears_only_playback_pipeline_error() -> None:
+    service, _, relay, _ = make_service()
+    service.start()
+
+    service.report_pipeline_error("virtual output failed")
+    assert service.status.code == "pipeline_error"
+    service.report_pipeline_active()
+    assert service.status.code == "active"
+
+    relay.on_status(AudioRoutingStatus("pipeline_error", "relay failed"))  # type: ignore[operator]
+    service.report_pipeline_error("virtual output failed again")
+    service.report_pipeline_active()
+
+    assert service.status == AudioRoutingStatus("pipeline_error", "relay failed")
+
+
+def test_reconfiguration_is_not_active_until_relay_confirms_start() -> None:
+    service, _, relay, _ = make_service()
+    service.start()
+    assert service.status.code == "active"
+
+    relay.report_active = False
+    service.apply(AudioRoutingSettings(microphone_gain=0.8))
+
+    assert service.status.code == "pipeline_error"
+    assert "запускается" in service.status.message

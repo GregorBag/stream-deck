@@ -17,16 +17,18 @@ class SettingsController:
         routing_repository: object | None = None,
         device_registry: object | None = None,
         on_routing_change: Callable[[AudioRoutingSettings], None] | None = None,
+        initial_routing_settings: AudioRoutingSettings | None = None,
     ) -> None:
         self._autostart = autostart
         self._routing_repository = routing_repository
         self._device_registry = device_registry
         self._on_routing_change = on_routing_change or (lambda settings: None)
-        self._routing_settings = (
-            routing_repository.load()
-            if routing_repository is not None
-            else AudioRoutingSettings()
-        )
+        if initial_routing_settings is not None:
+            self._routing_settings = initial_routing_settings
+        elif routing_repository is not None:
+            self._routing_settings = routing_repository.load()
+        else:
+            self._routing_settings = AudioRoutingSettings()
 
     def autostart_enabled(self) -> bool:
         return self._autostart.is_enabled()

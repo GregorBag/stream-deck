@@ -201,13 +201,15 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         current = settings_controller_reference[0].routing_settings()
         return current.microphone_gain, current.sound_gain
 
+    sound_player_factory = QtSoundPlayerFactory(
+        monitor_device_provider=audio_routing_service.monitor_device,
+        cable_device_provider=audio_routing_service.cable_device,
+        mix_gains_provider=current_mix_gains,
+        on_routing_error=audio_routing_service.report_pipeline_error,
+        on_routing_active=audio_routing_service.report_pipeline_active,
+    )
     sound_playback = SoundPlaybackService(
-        QtSoundPlayerFactory(
-            monitor_device_provider=audio_routing_service.monitor_device,
-            cable_device_provider=audio_routing_service.cable_device,
-            mix_gains_provider=current_mix_gains,
-            on_routing_error=audio_routing_service.report_pipeline_error,
-        ),
+        sound_player_factory,
         lambda index, path: simulator.set_status(
             f"Воспроизводится: {path.stem}"
         ),
@@ -231,11 +233,16 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
             packaged=bool(getattr(sys, "frozen", False)),
         )
     )
+    def apply_routing_settings(settings: AudioRoutingSettings) -> None:
+        audio_routing_service.apply(settings)
+        sound_player_factory.update_mix_gains()
+
     settings_controller = SettingsController(
         autostart,
         routing_repository,
         audio_device_registry,
-        audio_routing_service.apply,
+        apply_routing_settings,
+        routing_settings,
     )
     settings_controller_reference.append(settings_controller)
     settings_dialog = SettingsDialog(
