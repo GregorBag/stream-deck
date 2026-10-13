@@ -32,16 +32,23 @@ class RecordingAudioCoordinator:
         self.applied = []
         self.adopted = []
         self.close_count = 0
+        self.revision = 0
         self.instances.append(self)
 
-    def start(self, panel) -> None:
+    def start(self, panel) -> int:
+        self.revision += 1
         self.started.append(panel)
+        return self.revision
 
-    def apply_configuration(self, panel) -> None:
+    def apply_configuration(self, panel) -> int:
+        self.revision += 1
         self.applied.append(panel)
+        return self.revision
 
-    def adopt_channel(self, panel, channel_index: int) -> None:
+    def adopt_channel(self, panel, channel_index: int) -> int:
+        self.revision += 1
         self.adopted.append((panel, channel_index))
+        return self.revision
 
     def close(self) -> None:
         self.close_count += 1

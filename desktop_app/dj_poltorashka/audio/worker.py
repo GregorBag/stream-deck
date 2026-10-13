@@ -1,6 +1,7 @@
 """Фоновое выполнение аудиоопераций без блокировки интерфейса."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Protocol
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
@@ -58,11 +59,12 @@ class _AudioWorker(QObject):
         self._initialize_thread = initialize_thread
         self._uninitialize_thread = uninitialize_thread
         self._thread_initialized = False
+        self._revision = 0
         self._timer: QTimer | None = None
         self._last_error: str | None = None
 
-    @Slot(object)
-    def start(self, panel: PanelConfiguration) -> None:
+    @Slot(object, int)
+    def start(self, panel: PanelConfiguration, revision: int) -> None:
         if self._timer is not None:
             return
         try:
@@ -71,6 +73,7 @@ class _AudioWorker(QObject):
             self._report_error(error)
             return
         self._thread_initialized = True
+        self._revision = revision
         self._timer = QTimer(self)
         self._timer.setInterval(self._poll_interval_ms)
         self._timer.timeout.connect(self._poll)
@@ -78,16 +81,23 @@ class _AudioWorker(QObject):
         self._timer.start()
         self._poll()
 
-    @Slot(object)
-    def apply_configuration(self, panel: PanelConfiguration) -> None:
+    @Slot(object, int)
+    def apply_configuration(
+        self,
+        panel: PanelConfiguration,
+        revision: int,
+    ) -> None:
+        self._revision = revision
         self._run_command(lambda: self._service.apply_configuration(panel))
 
-    @Slot(object, int)
+    @Slot(object, int, int)
     def adopt_channel(
         self,
         panel: PanelConfiguration,
         channel_index: int,
+        revision: int,
     ) -> None:
+        self._revision = revision
         self._run_command(
             lambda: self._service.adopt_channel(panel, channel_index)
         )
@@ -110,7 +120,9 @@ class _AudioWorker(QObject):
             self._report_error(error)
             return
         self._last_error = None
-        self.updates_ready.emit(updates)
+        self.updates_ready.emit(
+            tuple(replace(update, revision=self._revision) for update in updates)
+        )
 
     def _run_command(self, command: Callable[[], None]) -> None:
         try:
@@ -129,9 +141,9 @@ class _AudioWorker(QObject):
 class AudioCoordinator(QObject):
     """Управляет одним рабочим потоком аудиосистемы."""
 
-    _start_requested = Signal(object)
-    _apply_requested = Signal(object)
-    _adopt_requested = Signal(object, int)
+    _start_requested = Signal(object, int)
+    _apply_requested = Signal(object, int)
+    _adopt_requested = Signal(object, int, int)
     _stop_requested = Signal()
 
     def __init__(
@@ -161,6 +173,7 @@ class AudioCoordinator(QObject):
         self._worker.error.connect(self._deliver_error)
         self._thread.finished.connect(self._worker.deleteLater)
         self._started = False
+        self._revision = 0
 
     @property
     def poll_interval_ms(self) -> int:
@@ -170,26 +183,32 @@ class AudioCoordinator(QObject):
     def is_running(self) -> bool:
         return self._thread.isRunning()
 
-    def start(self, panel: PanelConfiguration) -> None:
+    def start(self, panel: PanelConfiguration) -> int:
         if self._started:
-            return
+            return self._revision
         self._started = True
+        self._revision += 1
         self._thread.start()
-        self._start_requested.emit(panel)
+        self._start_requested.emit(panel, self._revision)
+        return self._revision
 
-    def apply_configuration(self, panel: PanelConfiguration) -> None:
+    def apply_configuration(self, panel: PanelConfiguration) -> int:
         if not self._started:
             raise RuntimeError("Аудиокоординатор ещё не запущен")
-        self._apply_requested.emit(panel)
+        self._revision += 1
+        self._apply_requested.emit(panel, self._revision)
+        return self._revision
 
     def adopt_channel(
         self,
         panel: PanelConfiguration,
         channel_index: int,
-    ) -> None:
+    ) -> int:
         if not self._started:
             raise RuntimeError("Аудиокоординатор ещё не запущен")
-        self._adopt_requested.emit(panel, channel_index)
+        self._revision += 1
+        self._adopt_requested.emit(panel, channel_index, self._revision)
+        return self._revision
 
     def close(self) -> None:
         if not self._thread.isRunning():

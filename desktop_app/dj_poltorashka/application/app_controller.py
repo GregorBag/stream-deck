@@ -45,6 +45,7 @@ class AppController:
         self._sound_playback = sound_playback
         self._quit_application = quit_application
         self._audio_states: dict[int, ChannelAudioUpdate] = {}
+        self._audio_revision = 0
         self._event_router = PanelEventRouter(
             self.set_volume,
             self.toggle_mute,
@@ -62,7 +63,9 @@ class AppController:
             except (OSError, ValueError, LookupError) as error:
                 self._dialogs.show_error("Восстановление", str(error))
 
-        self._audio_coordinator.start(self._active_configuration)
+        self._audio_revision = self._audio_coordinator.start(
+            self._active_configuration
+        )
         self._refresh()
         self._tray.show()
         if not background:
@@ -132,7 +135,10 @@ class AppController:
         self._audio_states.pop(channel_index, None)
         self._refresh()
         if channel_kind == "application":
-            self._audio_coordinator.adopt_channel(panel, channel_index)
+            self._audio_revision = self._audio_coordinator.adopt_channel(
+                panel,
+                channel_index,
+            )
 
     def import_sound(self, button_index: int) -> None:
         source = self._dialogs.choose_sound_file()
@@ -166,7 +172,9 @@ class AppController:
             self._dialogs.show_error("Пресет", str(error))
         else:
             self._audio_states.clear()
-            self._audio_coordinator.apply_configuration(panel)
+            self._audio_revision = self._audio_coordinator.apply_configuration(
+                panel
+            )
         self._refresh()
 
     def save_active_to_preset(self) -> bool:
@@ -242,6 +250,7 @@ class AppController:
             update
             for update in updates
             if 0 <= update.channel_index < channel_count
+            and update.revision == self._audio_revision
             and (
                 update.target is None
                 or update.target
@@ -330,7 +339,9 @@ class AppController:
         else:
             replaced = True
             if sync_audio:
-                self._audio_coordinator.apply_configuration(panel)
+                self._audio_revision = (
+                    self._audio_coordinator.apply_configuration(panel)
+                )
         if refresh or not replaced:
             self._refresh()
         return replaced

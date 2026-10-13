@@ -154,19 +154,26 @@ class FakeAudioCoordinator:
         self.started: list[PanelConfiguration] = []
         self.applied: list[PanelConfiguration] = []
         self.adopted: list[tuple[PanelConfiguration, int]] = []
+        self.revision = 0
 
-    def start(self, panel: PanelConfiguration) -> None:
+    def start(self, panel: PanelConfiguration) -> int:
         self.started.append(panel)
+        self.revision += 1
+        return self.revision
 
-    def apply_configuration(self, panel: PanelConfiguration) -> None:
+    def apply_configuration(self, panel: PanelConfiguration) -> int:
         self.applied.append(panel)
+        self.revision += 1
+        return self.revision
 
     def adopt_channel(
         self,
         panel: PanelConfiguration,
         channel_index: int,
-    ) -> None:
+    ) -> int:
         self.adopted.append((panel, channel_index))
+        self.revision += 1
+        return self.revision
 
 
 class FakeSoundPlayback:
@@ -473,6 +480,30 @@ def test_stale_audio_update_is_ignored_after_channel_reassignment(
     context.controller.handle_audio_updates((stale,))
 
     assert context.service.stored_configuration.active.channels[1] == current
+    assert context.main_window.audio_states[-1] == ()
+
+
+def test_stale_audio_update_is_ignored_after_local_volume_change(
+    tmp_path: Path,
+) -> None:
+    context = ControllerContext(tmp_path)
+    context.controller.start(background=True, draft_available=False)
+    stale_revision = context.audio.revision
+    context.controller.set_volume(0, 0.4)
+    stale = ChannelAudioUpdate(
+        0,
+        0.9,
+        False,
+        "active",
+        "Динамики",
+        True,
+        AudioTarget("master"),
+        revision=stale_revision,
+    )
+
+    context.controller.handle_audio_updates((stale,))
+
+    assert context.service.stored_configuration.active.channels[0].volume == 0.4
     assert context.main_window.audio_states[-1] == ()
 
 

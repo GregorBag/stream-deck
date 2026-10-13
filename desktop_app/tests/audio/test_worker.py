@@ -6,6 +6,7 @@ from threading import Event, Timer
 from PySide6.QtCore import QThread
 from pytestqt.qtbot import QtBot
 
+from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.audio.worker import AudioCoordinator
 from dj_poltorashka.configuration.models import (
     MixerChannelConfig,
@@ -96,6 +97,38 @@ def test_coordinator_initializes_com_inside_worker_thread(qtbot: QtBot) -> None:
 
     assert initialized[0] is not QThread.currentThread()
     assert uninitialized == initialized
+
+
+def test_coordinator_marks_updates_with_current_configuration_revision(
+    qtbot: QtBot,
+) -> None:
+    service = FakeAudioService()
+    service.poll_action = lambda: (
+        ChannelAudioUpdate(0, 0.5, False, "active", "Динамики", False),
+    )
+    updates: list[tuple[ChannelAudioUpdate, ...]] = []
+    coordinator = AudioCoordinator(service, updates.append, lambda error: None)
+    panel = make_panel()
+
+    try:
+        first_revision = coordinator.start(panel)
+        qtbot.waitUntil(
+            lambda: any(
+                batch and batch[0].revision == first_revision
+                for batch in updates
+            )
+        )
+        second_revision = coordinator.apply_configuration(panel)
+        qtbot.waitUntil(
+            lambda: any(
+                batch and batch[0].revision == second_revision
+                for batch in updates
+            )
+        )
+    finally:
+        coordinator.close()
+
+    assert second_revision == first_revision + 1
 
 
 def test_coordinator_reports_repeated_error_only_once_until_success(

@@ -104,6 +104,7 @@ class ChannelAudioUpdate:
     display_name: str | None
     externally_changed: bool
     target: AudioTarget | None = field(default=None, compare=False)
+    revision: int = field(default=0, compare=False)
 
     def __post_init__(self) -> None:
         if isinstance(self.channel_index, bool) or not isinstance(
@@ -126,3 +127,9 @@ class ChannelAudioUpdate:
             raise ValueError("Признак внешнего изменения должен быть логическим")
         if self.target is not None and not isinstance(self.target, AudioTarget):
             raise ValueError("Аудиоцель должна иметь тип AudioTarget")
+        if (
+            isinstance(self.revision, bool)
+            or not isinstance(self.revision, int)
+            or self.revision < 0
+        ):
+            raise ValueError("Ревизия аудиосостояния должна быть неотрицательной")
