@@ -29,7 +29,7 @@ def make_panel(volume: float = 0.5) -> PanelConfiguration:
                 display_name="Player",
             ),
             MixerChannelConfig("microphone", 0.4, False, display_name="Микрофон"),
-            MixerChannelConfig("master", 0.3, True),
+            MixerChannelConfig("unassigned", 0.3, True),
         ),
         sound_buttons=(
             SoundButtonConfig("intro.mp3", "Заставка"),
@@ -132,3 +132,15 @@ def test_decoder_wraps_model_validation_error() -> None:
 
     with pytest.raises(ValueError, match=r"active\.channels\[0\]"):
         decode_stored_configuration(invalid)
+
+
+def test_decode_rejects_configuration_with_duplicate_targets() -> None:
+    encoded = encode_panel_configuration(make_panel())
+    channels = encoded["channels"]
+    assert isinstance(channels, list)
+    duplicate = channels[3]
+    assert isinstance(duplicate, dict)
+    duplicate["channel_kind"] = "master"
+
+    with pytest.raises(ValueError, match=r"panel: Общая громкость"):
+        decode_panel_configuration(encoded)

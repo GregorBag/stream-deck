@@ -11,9 +11,16 @@ from dj_poltorashka.configuration.workspace import ConfigurationWorkspace
 
 
 def make_panel(volume: float) -> PanelConfiguration:
-    channels = tuple(
-        MixerChannelConfig(channel_kind="master", volume=volume, muted=False)
-        for _ in range(4)
+    channels = (
+        MixerChannelConfig(channel_kind="master", volume=volume, muted=False),
+        *(
+            MixerChannelConfig(
+                channel_kind="unassigned",
+                volume=volume,
+                muted=False,
+            )
+            for _ in range(3)
+        ),
     )
     buttons = tuple(SoundButtonConfig() for _ in range(8))
     return PanelConfiguration(channels=channels, sound_buttons=buttons)

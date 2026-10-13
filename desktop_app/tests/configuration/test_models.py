@@ -14,7 +14,7 @@ from dj_poltorashka.configuration.models import (
 
 def make_channels(count: int = 4) -> tuple[MixerChannelConfig, ...]:
     return tuple(
-        MixerChannelConfig(channel_kind="master", volume=0.5, muted=False)
+        MixerChannelConfig(channel_kind="unassigned", volume=0.5, muted=False)
         for _ in range(count)
     )
 
@@ -90,6 +90,79 @@ def test_executable_path_is_normalized_case_insensitively() -> None:
 
     assert first == r"c:\program files\discord\discord.exe"
     assert second == first
+
+
+@pytest.mark.parametrize(
+    ("duplicate_channels", "error_fragment"),
+    (
+        (
+            (
+                MixerChannelConfig("master", 0.5, False),
+                MixerChannelConfig("master", 0.7, True),
+            ),
+            "Общая громкость",
+        ),
+        (
+            (
+                MixerChannelConfig("microphone", 0.5, False),
+                MixerChannelConfig("microphone", 0.7, True),
+            ),
+            "Микрофон",
+        ),
+        (
+            (
+                MixerChannelConfig(
+                    "application",
+                    0.5,
+                    False,
+                    application_path=r"C:\Apps\Player.exe",
+                ),
+                MixerChannelConfig(
+                    "application",
+                    0.7,
+                    True,
+                    application_path=r"c:\apps\.\player.exe",
+                ),
+            ),
+            "player.exe",
+        ),
+    ),
+)
+def test_panel_configuration_rejects_duplicate_audio_targets(
+    duplicate_channels: tuple[MixerChannelConfig, MixerChannelConfig],
+    error_fragment: str,
+) -> None:
+    channels = (
+        *duplicate_channels,
+        MixerChannelConfig("unassigned", 0.0, False),
+        MixerChannelConfig("unassigned", 0.0, False),
+    )
+
+    with pytest.raises(ValueError, match=error_fragment):
+        PanelConfiguration(channels=channels, sound_buttons=make_buttons())
+
+
+def test_panel_configuration_accepts_unassigned_and_distinct_applications() -> None:
+    channels = (
+        MixerChannelConfig("unassigned", 0.0, False),
+        MixerChannelConfig("unassigned", 0.0, False),
+        MixerChannelConfig(
+            "application",
+            0.5,
+            False,
+            application_path=r"C:\Apps\Player.exe",
+        ),
+        MixerChannelConfig(
+            "application",
+            0.7,
+            True,
+            application_path=r"C:\Apps\Browser.exe",
+        ),
+    )
+
+    panel = PanelConfiguration(channels=channels, sound_buttons=make_buttons())
+
+    assert panel.channels == channels
 
 
 @pytest.mark.parametrize(

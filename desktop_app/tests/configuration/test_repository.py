@@ -17,8 +17,12 @@ from dj_poltorashka.configuration.repository import (
 
 def make_panel(volume: float) -> PanelConfiguration:
     return PanelConfiguration(
-        channels=tuple(
-            MixerChannelConfig("master", volume, False) for _ in range(4)
+        channels=(
+            MixerChannelConfig("master", volume, False),
+            *(
+                MixerChannelConfig("unassigned", volume, False)
+                for _ in range(3)
+            ),
         ),
         sound_buttons=tuple(SoundButtonConfig() for _ in range(8)),
     )

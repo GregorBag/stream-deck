@@ -58,8 +58,12 @@ def make_panel(
     ]
     buttons.extend(SoundButtonConfig() for _ in range(8 - len(buttons)))
     return PanelConfiguration(
-        channels=tuple(
-            MixerChannelConfig("master", volume, False) for _ in range(4)
+        channels=(
+            MixerChannelConfig("master", volume, False),
+            *(
+                MixerChannelConfig("unassigned", volume, False)
+                for _ in range(3)
+            ),
         ),
         sound_buttons=tuple(buttons),
     )

@@ -15,6 +15,26 @@ _SOUND_BUTTON_COUNT = 8
 _PRESET_COUNT = 3
 
 
+def _require_unique_audio_targets(
+    channels: tuple["MixerChannelConfig", ...],
+) -> None:
+    assigned_targets: set[tuple[str, str | None]] = set()
+    for channel in channels:
+        if channel.channel_kind == "unassigned":
+            continue
+
+        target = (channel.channel_kind, channel.application_path)
+        if target in assigned_targets:
+            if channel.channel_kind == "master":
+                name = "Общая громкость"
+            elif channel.channel_kind == "microphone":
+                name = "Микрофон"
+            else:
+                name = channel.application_path or "Программа"
+            raise ValueError(f"{name} уже назначен другому каналу")
+        assigned_targets.add(target)
+
+
 def normalize_executable_path(path: str) -> str:
     """Вернуть абсолютный путь Windows в нормализованном виде."""
     if not isinstance(path, str) or not path.strip():
@@ -101,6 +121,7 @@ class PanelConfiguration:
             raise ValueError("Все каналы должны иметь тип MixerChannelConfig")
         if not all(isinstance(button, SoundButtonConfig) for button in sound_buttons):
             raise ValueError("Все кнопки должны иметь тип SoundButtonConfig")
+        _require_unique_audio_targets(channels)
         object.__setattr__(self, "channels", channels)
         object.__setattr__(self, "sound_buttons", sound_buttons)
 
