@@ -2,6 +2,8 @@
 .vscode
 .superpowers/
 desktop_app/.venv/
+/desktop_app/build/
+/desktop_app/dist/
 __pycache__/
 .pytest_cache/
 *.py[cod]

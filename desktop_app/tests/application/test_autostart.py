@@ -55,6 +55,18 @@ def test_packaged_background_command_quotes_executable_path() -> None:
     assert command == '"C:\\Program Files\\DJ Poltorashka\\app.exe" --background'
 
 
+def test_packaged_background_command_supports_cyrillic_path() -> None:
+    command = build_background_command(
+        Path(r"C:\Каталог с пробелами\DJ Poltorashka.exe"),
+        packaged=True,
+    )
+
+    assert command == (
+        '"C:\\Каталог с пробелами\\DJ Poltorashka.exe" --background'
+    )
+    assert "-m dj_poltorashka" not in command
+
+
 def test_source_background_command_runs_module_without_console() -> None:
     command = build_background_command(
         Path(r"C:\Program Files\Python\pythonw.exe"),
