@@ -171,4 +171,3 @@ class AudioCoordinator(QObject):
     @Slot(str)
     def _deliver_error(self, message: str) -> None:
         self._on_error(message)
-

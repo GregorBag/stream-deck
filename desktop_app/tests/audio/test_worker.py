@@ -126,4 +126,3 @@ def test_close_waits_for_active_poll_and_stops_thread(qtbot: QtBot) -> None:
 
     assert not coordinator.is_running
     assert release_poll.is_set()
-

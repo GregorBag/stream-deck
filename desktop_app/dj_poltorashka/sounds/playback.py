@@ -114,4 +114,3 @@ class SoundPlaybackService:
             or not 0 <= button_index < 8
         ):
             raise IndexError("Индекс звуковой кнопки должен быть от 0 до 7")
-

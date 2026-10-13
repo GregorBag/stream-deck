@@ -103,4 +103,3 @@ class _QtSoundPlayer:
     def _handle_error(self, error, message: str) -> None:
         normalized = message.strip() if isinstance(message, str) else ""
         self._on_error(normalized or "Ошибка Qt Multimedia")
-

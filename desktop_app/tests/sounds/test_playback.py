@@ -268,4 +268,3 @@ def test_qt_factory_updates_default_output_for_every_active_player(
     second.close()
     assert all(media.deleted == 1 for media in FakeMediaPlayer.instances)
     assert all(output.deleted == 1 for output in FakeAudioOutput.instances)
-
