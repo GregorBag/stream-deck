@@ -38,6 +38,12 @@ try {
         --workpath $build_path `
         --distpath $dist_path `
         $spec_path
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+
+    & $python_path -m dj_poltorashka.build_rules `
+        (Join-Path $dist_path "DJ Poltorashka")
     exit $LASTEXITCODE
 }
 finally {

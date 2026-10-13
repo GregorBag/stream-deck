@@ -5,6 +5,8 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 from PySide6.QtCore import QLibraryInfo
 
+from dj_poltorashka.build_rules import filter_windows_binaries
+
 
 project_root = Path(SPECPATH).parent
 entry_point = project_root / "dj_poltorashka" / "__main__.py"
@@ -42,6 +44,7 @@ analysis = Analysis(
     noarchive=False,
     optimize=0,
 )
+analysis.binaries = filter_windows_binaries(analysis.binaries)
 python_archive = PYZ(analysis.pure)
 
 executable = EXE(
