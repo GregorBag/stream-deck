@@ -1,6 +1,6 @@
 """Неизменяемые типы аудиосистемы."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Literal
 
@@ -103,6 +103,7 @@ class ChannelAudioUpdate:
     availability: AudioAvailability
     display_name: str | None
     externally_changed: bool
+    target: AudioTarget | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if isinstance(self.channel_index, bool) or not isinstance(
@@ -123,3 +124,5 @@ class ChannelAudioUpdate:
             object.__setattr__(self, "display_name", self.display_name.strip())
         if not isinstance(self.externally_changed, bool):
             raise ValueError("Признак внешнего изменения должен быть логическим")
+        if self.target is not None and not isinstance(self.target, AudioTarget):
+            raise ValueError("Аудиоцель должна иметь тип AudioTarget")

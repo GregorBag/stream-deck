@@ -222,6 +222,33 @@ def test_program_waits_then_applies_state_when_session_appears() -> None:
     assert backend.snapshots[target].members[0].volume == 0.6
 
 
+def test_adopt_waiting_program_applies_saved_state_when_session_appears() -> None:
+    target = AudioTarget("application", r"C:\Apps\Player.exe")
+    backend = FakeAudioBackend()
+    service = AudioService(backend)
+    panel = make_panel(
+        MixerChannelConfig(
+            "application",
+            0.6,
+            True,
+            application_path=r"C:\Apps\Player.exe",
+            display_name="Player",
+        )
+    )
+
+    service.adopt_channel(panel, 0)
+    waiting = service.poll()
+    backend.snapshots[target] = AudioTargetSnapshot(
+        (make_member("session-a", 1.0, False, "Player"),)
+    )
+    active = service.poll()
+
+    assert waiting[0].availability == "waiting"
+    assert not active[0].externally_changed
+    assert backend.snapshots[target].members[0].volume == 0.6
+    assert backend.snapshots[target].members[0].muted
+
+
 def test_new_program_member_receives_saved_group_state() -> None:
     target = AudioTarget("application", r"C:\Apps\Player.exe")
     backend = FakeAudioBackend()

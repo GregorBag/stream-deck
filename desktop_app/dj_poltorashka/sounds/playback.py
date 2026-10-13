@@ -43,7 +43,7 @@ class SoundPlaybackService:
         self._players: dict[int, tuple[int, SoundPlayer]] = {}
         self._generation = 0
 
-    def play(self, button_index: int, path: Path) -> None:
+    def play(self, button_index: int, path: Path) -> bool:
         self._require_button_index(button_index)
         sound_path = Path(path)
         self._release(button_index, stop=True)
@@ -68,8 +68,11 @@ class SoundPlaybackService:
                 self._release(button_index, stop=True)
             message = str(error).strip() or type(error).__name__
             self._on_error(button_index, message)
-            return
+            return False
+        if not self._is_current(button_index, generation):
+            return False
         self._on_started(button_index, sound_path)
+        return True
 
     def close(self) -> None:
         for button_index in tuple(self._players):

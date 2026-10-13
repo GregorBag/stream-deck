@@ -4,7 +4,7 @@ from dataclasses import replace
 import logging
 from pathlib import Path
 
-from dj_poltorashka.audio.models import ChannelAudioUpdate
+from dj_poltorashka.audio.models import AudioTarget, ChannelAudioUpdate
 from dj_poltorashka.configuration.models import (
     ChannelKind,
     MixerChannelConfig,
@@ -105,24 +105,32 @@ class AppController:
             application_path = str(selected_path)
             display_name = Path(selected_path).stem
 
-        channel = MixerChannelConfig(
-            channel_kind=channel_kind,
-            volume=current.volume,
-            muted=current.muted,
-            application_path=application_path,
-            display_name=display_name,
-        )
-        panel = self._editor.set_channel(
-            self._active_configuration,
-            channel_index,
-            channel,
-        )
+        try:
+            channel = MixerChannelConfig(
+                channel_kind=channel_kind,
+                volume=current.volume,
+                muted=current.muted,
+                application_path=application_path,
+                display_name=display_name,
+            )
+            panel = self._editor.set_channel(
+                self._active_configuration,
+                channel_index,
+                channel,
+            )
+        except ValueError as error:
+            self._dialogs.show_error("Конфигурация", str(error))
+            self._refresh()
+            return
         if not self._replace_active(
             panel,
             "Конфигурация",
             sync_audio=channel_kind != "application",
+            refresh=False,
         ):
             return
+        self._audio_states.pop(channel_index, None)
+        self._refresh()
         if channel_kind == "application":
             self._audio_coordinator.adopt_channel(panel, channel_index)
 
@@ -157,6 +165,7 @@ class AppController:
         except (OSError, ValueError, LookupError) as error:
             self._dialogs.show_error("Пресет", str(error))
         else:
+            self._audio_states.clear()
             self._audio_coordinator.apply_configuration(panel)
         self._refresh()
 
@@ -213,7 +222,7 @@ class AppController:
             return
 
         try:
-            self._sound_playback.play(button_index, path)
+            started = self._sound_playback.play(button_index, path)
         except Exception as error:
             details = str(error).strip() or type(error).__name__
             _LOGGER.exception("Ошибка воспроизведения звуковой кнопки")
@@ -221,7 +230,8 @@ class AppController:
                 f"Ошибка воспроизведения: {details}"
             )
             return
-        self._simulator.set_status(f"Воспроизводится: {sound.display_name}")
+        if started:
+            self._simulator.set_status(f"Воспроизводится: {sound.display_name}")
 
     def handle_audio_updates(
         self,
@@ -232,6 +242,13 @@ class AppController:
             update
             for update in updates
             if 0 <= update.channel_index < channel_count
+            and (
+                update.target is None
+                or update.target
+                == AudioTarget.for_channel(
+                    self._active_configuration.channels[update.channel_index]
+                )
+            )
         )
         for update in valid_updates:
             self._audio_states[update.channel_index] = update
@@ -303,6 +320,7 @@ class AppController:
         panel,
         error_title: str,
         sync_audio: bool = True,
+        refresh: bool = True,
     ) -> bool:
         try:
             self._configuration_service.replace_active(panel)
@@ -313,7 +331,8 @@ class AppController:
             replaced = True
             if sync_audio:
                 self._audio_coordinator.apply_configuration(panel)
-        self._refresh()
+        if refresh or not replaced:
+            self._refresh()
         return replaced
 
     def _refresh(self) -> None:

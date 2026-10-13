@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_submodules
 from PySide6.QtCore import QLibraryInfo
 
 
@@ -11,12 +11,13 @@ entry_point = project_root / "dj_poltorashka" / "__main__.py"
 
 datas = []
 binaries = []
-hidden_imports = []
-for package_name in ("pycaw", "comtypes"):
-    package_datas, package_binaries, package_hidden = collect_all(package_name)
-    datas.extend(package_datas)
-    binaries.extend(package_binaries)
-    hidden_imports.extend(package_hidden)
+hidden_imports = collect_submodules("pycaw")
+hidden_imports.extend(
+    collect_submodules(
+        "comtypes",
+        filter=lambda name: not name.startswith("comtypes.test"),
+    )
+)
 
 qt_plugins_root = Path(
     QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)

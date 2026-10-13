@@ -17,9 +17,15 @@ class FakePlayer:
         self.start_count = 0
         self.stop_count = 0
         self.close_count = 0
+        self.start_error: RuntimeError | None = None
+        self.fail_during_start = False
 
     def start(self) -> None:
         self.start_count += 1
+        if self.start_error is not None:
+            raise self.start_error
+        if self.fail_during_start:
+            self.on_error("decoder failed during start")
 
     def stop(self) -> None:
         self.stop_count += 1
@@ -31,9 +37,13 @@ class FakePlayer:
 class FakePlayerFactory:
     def __init__(self) -> None:
         self.players: list[FakePlayer] = []
+        self.start_error: RuntimeError | None = None
+        self.fail_during_start = False
 
     def create(self, path: Path, on_finished, on_error) -> FakePlayer:
         player = FakePlayer(path, on_finished, on_error)
+        player.start_error = self.start_error
+        player.fail_during_start = self.fail_during_start
         self.players.append(player)
         return player
 
@@ -124,6 +134,33 @@ def test_error_closes_only_affected_slot(tmp_path: Path) -> None:
     assert unaffected.stop_count == 0
     assert unaffected.close_count == 0
     assert errors == [(0, "decoder failed")]
+
+
+@pytest.mark.parametrize("error_during_callback", (False, True))
+def test_synchronous_start_error_does_not_report_success(
+    tmp_path: Path,
+    error_during_callback: bool,
+) -> None:
+    factory = FakePlayerFactory()
+    if error_during_callback:
+        factory.fail_during_start = True
+    else:
+        factory.start_error = RuntimeError("decoder failed during start")
+    started: list[int] = []
+    errors: list[tuple[int, str]] = []
+    service = SoundPlaybackService(
+        factory,
+        lambda index, path: started.append(index),
+        lambda index: None,
+        lambda index, message: errors.append((index, message)),
+    )
+
+    result = service.play(0, tmp_path / "sound.wav")
+
+    assert not result
+    assert started == []
+    assert errors == [(0, "decoder failed during start")]
+    assert factory.players[0].close_count == 1
 
 
 def test_close_stops_and_releases_all_players(tmp_path: Path) -> None:

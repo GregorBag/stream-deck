@@ -12,6 +12,18 @@ from dj_poltorashka.configuration.models import PanelConfiguration
 _POLL_INTERVAL_MS = 250
 
 
+def _initialize_com() -> None:
+    from comtypes import CoInitialize
+
+    CoInitialize()
+
+
+def _uninitialize_com() -> None:
+    from comtypes import CoUninitialize
+
+    CoUninitialize()
+
+
 class CoordinatorAudioService(Protocol):
     """Операции аудиосервиса, выполняемые в рабочем потоке."""
 
@@ -37,10 +49,15 @@ class _AudioWorker(QObject):
         self,
         service: CoordinatorAudioService,
         poll_interval_ms: int,
+        initialize_thread: Callable[[], None],
+        uninitialize_thread: Callable[[], None],
     ) -> None:
         super().__init__()
         self._service = service
         self._poll_interval_ms = poll_interval_ms
+        self._initialize_thread = initialize_thread
+        self._uninitialize_thread = uninitialize_thread
+        self._thread_initialized = False
         self._timer: QTimer | None = None
         self._last_error: str | None = None
 
@@ -48,6 +65,12 @@ class _AudioWorker(QObject):
     def start(self, panel: PanelConfiguration) -> None:
         if self._timer is not None:
             return
+        try:
+            self._initialize_thread()
+        except Exception as error:
+            self._report_error(error)
+            return
+        self._thread_initialized = True
         self._timer = QTimer(self)
         self._timer.setInterval(self._poll_interval_ms)
         self._timer.timeout.connect(self._poll)
@@ -74,6 +97,9 @@ class _AudioWorker(QObject):
         if self._timer is not None:
             self._timer.stop()
             self._timer = None
+        if self._thread_initialized:
+            self._uninitialize_thread()
+            self._thread_initialized = False
         QThread.currentThread().quit()
 
     @Slot()
@@ -113,12 +139,19 @@ class AudioCoordinator(QObject):
         service: CoordinatorAudioService,
         on_updates: Callable[[tuple[ChannelAudioUpdate, ...]], None],
         on_error: Callable[[str], None],
+        initialize_thread: Callable[[], None] = _initialize_com,
+        uninitialize_thread: Callable[[], None] = _uninitialize_com,
     ) -> None:
         super().__init__()
         self._on_updates = on_updates
         self._on_error = on_error
         self._thread = QThread(self)
-        self._worker = _AudioWorker(service, _POLL_INTERVAL_MS)
+        self._worker = _AudioWorker(
+            service,
+            _POLL_INTERVAL_MS,
+            initialize_thread,
+            uninitialize_thread,
+        )
         self._worker.moveToThread(self._thread)
         self._start_requested.connect(self._worker.start)
         self._apply_requested.connect(self._worker.apply_configuration)

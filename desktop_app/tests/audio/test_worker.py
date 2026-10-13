@@ -78,6 +78,26 @@ def test_coordinator_runs_commands_and_poll_in_worker_thread(
     assert not coordinator.is_running
 
 
+def test_coordinator_initializes_com_inside_worker_thread(qtbot: QtBot) -> None:
+    service = FakeAudioService()
+    initialized: list[QThread] = []
+    uninitialized: list[QThread] = []
+    coordinator = AudioCoordinator(
+        service,
+        lambda updates: None,
+        lambda error: None,
+        initialize_thread=lambda: initialized.append(QThread.currentThread()),
+        uninitialize_thread=lambda: uninitialized.append(QThread.currentThread()),
+    )
+
+    coordinator.start(make_panel())
+    qtbot.waitUntil(lambda: bool(initialized))
+    coordinator.close()
+
+    assert initialized[0] is not QThread.currentThread()
+    assert uninitialized == initialized
+
+
 def test_coordinator_reports_repeated_error_only_once_until_success(
     qtbot: QtBot,
 ) -> None:

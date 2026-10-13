@@ -102,7 +102,9 @@ class AudioService:
                     snapshots[target] = error
             snapshot = snapshots[target]
             if isinstance(snapshot, Exception):
-                updates.append(self._unavailable_update(channel_index, channel))
+                updates.append(
+                    self._unavailable_update(channel_index, channel, target)
+                )
                 continue
 
             try:
@@ -115,7 +117,9 @@ class AudioService:
                     )
                 )
             except OSError:
-                updates.append(self._unavailable_update(channel_index, channel))
+                updates.append(
+                    self._unavailable_update(channel_index, channel, target)
+                )
 
         return tuple(updates)
 
@@ -147,9 +151,12 @@ class AudioService:
         snapshot: AudioTargetSnapshot,
     ) -> ChannelAudioUpdate:
         if snapshot.error is not None:
-            return self._unavailable_update(channel_index, channel)
+            return self._unavailable_update(channel_index, channel, target)
         if not snapshot.members:
             self._members[target] = {}
+            if target in self._pending_adopt:
+                self._pending_adopt.discard(target)
+                self._pending_apply.add(target)
             availability = (
                 "waiting" if target.target_kind == "application" else "unavailable"
             )
@@ -160,6 +167,7 @@ class AudioService:
                 availability,
                 channel.display_name,
                 False,
+                target,
             )
 
         members = {member.member_id: member for member in snapshot.members}
@@ -186,6 +194,7 @@ class AudioService:
                 "active",
                 selected.display_name,
                 True,
+                target,
             )
 
         new_member_ids = set(members) - set(previous)
@@ -202,6 +211,7 @@ class AudioService:
                 "active",
                 display_name,
                 False,
+                target,
             )
 
         changed_members = tuple(
@@ -224,6 +234,7 @@ class AudioService:
                 "active",
                 selected.display_name,
                 True,
+                target,
             )
 
         desired = self._desired[target]
@@ -235,6 +246,7 @@ class AudioService:
             "active",
             display_name,
             False,
+            target,
         )
 
     @staticmethod
@@ -270,6 +282,7 @@ class AudioService:
     def _unavailable_update(
         channel_index: int,
         channel: MixerChannelConfig,
+        target: AudioTarget,
     ) -> ChannelAudioUpdate:
         return ChannelAudioUpdate(
             channel_index,
@@ -278,4 +291,5 @@ class AudioService:
             "unavailable",
             channel.display_name,
             False,
+            target,
         )

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from dj_poltorashka.application.app_controller import AppController
-from dj_poltorashka.audio.models import ChannelAudioUpdate
+from dj_poltorashka.audio.models import AudioTarget, ChannelAudioUpdate
 from dj_poltorashka.configuration.defaults import (
     create_default_stored_configuration,
 )
@@ -174,10 +174,11 @@ class FakeSoundPlayback:
         self.played: list[tuple[int, Path]] = []
         self.play_error: RuntimeError | None = None
 
-    def play(self, button_index: int, path: Path) -> None:
+    def play(self, button_index: int, path: Path) -> bool:
         if self.play_error is not None:
             raise self.play_error
         self.played.append((button_index, path))
+        return True
 
 
 class ControllerContext:
@@ -343,6 +344,34 @@ def test_application_assignment_adopts_only_selected_channel(tmp_path: Path) -> 
     assert context.audio.adopted == [(panel, 2)]
 
 
+@pytest.mark.parametrize("channel_kind", ("master", "microphone", "application"))
+def test_duplicate_channel_assignment_is_reported_and_reverted(
+    tmp_path: Path,
+    channel_kind: str,
+) -> None:
+    context = ControllerContext(tmp_path)
+    if channel_kind == "microphone":
+        context.controller.set_channel(1, "microphone")
+        duplicate_index = 2
+    elif channel_kind == "application":
+        context.dialogs.application_path = Path("C:/Apps/Player.exe")
+        context.controller.set_channel(1, "application")
+        duplicate_index = 2
+    else:
+        duplicate_index = 1
+    context.dialogs.errors.clear()
+    context.clear_renders()
+
+    context.controller.set_channel(duplicate_index, channel_kind)
+
+    assert context.dialogs.errors
+    assert "уже назначен" in context.dialogs.errors[-1][1]
+    assert context.service.stored_configuration.active.channels[
+        duplicate_index
+    ].channel_kind == "unassigned"
+    assert_views_show_service_state(context)
+
+
 @pytest.mark.parametrize(
     ("background", "expected_window_count"),
     ((False, 1), (True, 0)),
@@ -423,6 +452,46 @@ def test_status_only_audio_update_does_not_change_configuration(
     assert context.audio.applied == []
     assert context.main_window.audio_states == [(update,)]
     assert_views_show_service_state(context)
+
+
+def test_stale_audio_update_is_ignored_after_channel_reassignment(
+    tmp_path: Path,
+) -> None:
+    context = ControllerContext(tmp_path)
+    context.controller.set_channel(1, "microphone")
+    current = context.service.stored_configuration.active.channels[1]
+    stale = ChannelAudioUpdate(
+        1,
+        0.2,
+        True,
+        "active",
+        "Старое устройство",
+        True,
+        AudioTarget("master"),
+    )
+
+    context.controller.handle_audio_updates((stale,))
+
+    assert context.service.stored_configuration.active.channels[1] == current
+    assert context.main_window.audio_states[-1] == ()
+
+
+def test_unassigning_channel_clears_its_runtime_state(tmp_path: Path) -> None:
+    context = ControllerContext(tmp_path)
+    state = ChannelAudioUpdate(
+        0,
+        1.0,
+        False,
+        "active",
+        "Динамики",
+        False,
+        AudioTarget("master"),
+    )
+    context.controller.handle_audio_updates((state,))
+
+    context.controller.set_channel(0, "unassigned")
+
+    assert context.main_window.audio_states[-1] == ()
 
 
 def test_panel_events_route_to_configuration_and_sound_status(tmp_path: Path) -> None:
