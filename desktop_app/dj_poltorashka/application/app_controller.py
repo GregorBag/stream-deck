@@ -1,6 +1,7 @@
 """Координация пользовательского интерфейса и конфигурации приложения."""
 
 from dataclasses import replace
+import logging
 from pathlib import Path
 
 from dj_poltorashka.audio.models import ChannelAudioUpdate
@@ -10,6 +11,9 @@ from dj_poltorashka.configuration.models import (
     SoundButtonConfig,
 )
 from dj_poltorashka.panel.event_router import PanelEventRouter
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class AppController:
@@ -26,6 +30,7 @@ class AppController:
         settings_dialog,
         tray,
         audio_coordinator,
+        sound_playback,
         quit_application,
     ):
         self._configuration_service = configuration_service
@@ -37,6 +42,7 @@ class AppController:
         self._settings_dialog = settings_dialog
         self._tray = tray
         self._audio_coordinator = audio_coordinator
+        self._sound_playback = sound_playback
         self._quit_application = quit_application
         self._audio_states: dict[int, ChannelAudioUpdate] = {}
         self._event_router = PanelEventRouter(
@@ -181,7 +187,41 @@ class AppController:
         return True
 
     def press_sound(self, button_index: int) -> None:
-        self._simulator.set_status("Воспроизведение будет добавлено позже")
+        buttons = self._active_configuration.sound_buttons
+        if (
+            isinstance(button_index, bool)
+            or not isinstance(button_index, int)
+            or not 0 <= button_index < len(buttons)
+        ):
+            message = "Неизвестная звуковая кнопка"
+            _LOGGER.warning(message)
+            self._simulator.set_status(message)
+            return
+
+        sound = buttons[button_index]
+        if sound.sound_id is None:
+            self._simulator.set_status(
+                f"Кнопка {button_index + 1} не настроена"
+            )
+            return
+
+        path = self._sound_library.resolve(sound.sound_id)
+        if path is None:
+            message = f"Звуковой файл не найден: {sound.display_name}"
+            _LOGGER.error(message)
+            self._simulator.set_status(message)
+            return
+
+        try:
+            self._sound_playback.play(button_index, path)
+        except Exception as error:
+            details = str(error).strip() or type(error).__name__
+            _LOGGER.exception("Ошибка воспроизведения звуковой кнопки")
+            self._simulator.set_status(
+                f"Ошибка воспроизведения: {details}"
+            )
+            return
+        self._simulator.set_status(f"Воспроизводится: {sound.display_name}")
 
     def handle_audio_updates(
         self,

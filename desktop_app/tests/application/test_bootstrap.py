@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QLabel, QMessageBox
 from pytestqt.qtbot import QtBot
 
 import dj_poltorashka.application.bootstrap as bootstrap
@@ -42,6 +42,28 @@ class RecordingAudioCoordinator:
 
     def adopt_channel(self, panel, channel_index: int) -> None:
         self.adopted.append((panel, channel_index))
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
+class RecordingSoundPlayerFactory:
+    pass
+
+
+class RecordingSoundPlayback:
+    instances: list["RecordingSoundPlayback"] = []
+
+    def __init__(self, factory, on_started, on_finished, on_error) -> None:
+        self.factory = factory
+        self.on_started = on_started
+        self.on_finished = on_finished
+        self.on_error = on_error
+        self.close_count = 0
+        self.instances.append(self)
+
+    def play(self, button_index: int, path: Path) -> None:
+        self.on_started(button_index, path)
 
     def close(self) -> None:
         self.close_count += 1
@@ -142,6 +164,41 @@ def test_audio_backend_startup_error_uses_unavailable_backend(
         )
     finally:
         running.close()
+
+
+def test_build_assembles_playback_callbacks_and_closes_once(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    RecordingSoundPlayback.instances.clear()
+    monkeypatch.setattr(
+        bootstrap,
+        "QtSoundPlayerFactory",
+        RecordingSoundPlayerFactory,
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "SoundPlaybackService",
+        RecordingSoundPlayback,
+    )
+
+    running = bootstrap.build_application(tmp_path)
+    playback = RecordingSoundPlayback.instances[-1]
+    status = running.simulator.widget.findChild(QLabel, "simulator_status")
+
+    assert isinstance(playback.factory, RecordingSoundPlayerFactory)
+    assert running.sound_playback is playback
+    playback.on_started(0, Path("intro.wav"))
+    assert status.text() == "Воспроизводится: intro"
+    playback.on_finished(0)
+    assert status.text() == "Воспроизведение завершено"
+    playback.on_error(0, "bad file")
+    assert status.text() == "Ошибка воспроизведения: bad file"
+
+    running.close()
+    running.close()
+    assert playback.close_count == 1
 
 
 def test_corrupt_configuration_is_preserved_and_default_is_loaded(

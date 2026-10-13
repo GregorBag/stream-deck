@@ -18,12 +18,21 @@ class FakeAudioBackend:
         return None
 
 
+class FakeSoundPlayerFactory:
+    pass
+
+
 def test_desktop_configuration_round_trip(
     qtbot: QtBot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(bootstrap, "WindowsAudioBackend", FakeAudioBackend)
+    monkeypatch.setattr(
+        bootstrap,
+        "QtSoundPlayerFactory",
+        FakeSoundPlayerFactory,
+    )
     running = bootstrap.build_application(tmp_path)
     qtbot.addWidget(running.main_window.widget)
     qtbot.addWidget(running.simulator.widget)

@@ -169,6 +169,17 @@ class FakeAudioCoordinator:
         self.adopted.append((panel, channel_index))
 
 
+class FakeSoundPlayback:
+    def __init__(self) -> None:
+        self.played: list[tuple[int, Path]] = []
+        self.play_error: RuntimeError | None = None
+
+    def play(self, button_index: int, path: Path) -> None:
+        if self.play_error is not None:
+            raise self.play_error
+        self.played.append((button_index, path))
+
+
 class ControllerContext:
     def __init__(self, tmp_path: Path, stored: StoredConfiguration | None = None):
         initial = stored or create_default_stored_configuration()
@@ -185,6 +196,7 @@ class ControllerContext:
         self.settings = FakeSettingsDialog()
         self.tray = FakeTray()
         self.audio = FakeAudioCoordinator()
+        self.playback = FakeSoundPlayback()
         self.quit_count = 0
         self.controller = AppController(
             configuration_service=self.service,
@@ -196,6 +208,7 @@ class ControllerContext:
             settings_dialog=self.settings,
             tray=self.tray,
             audio_coordinator=self.audio,
+            sound_playback=self.playback,
             quit_application=self.quit_application,
         )
 
@@ -428,7 +441,57 @@ def test_panel_events_route_to_configuration_and_sound_status(tmp_path: Path) ->
     context.controller.handle_panel_event(PresetPressed(0))
 
     assert context.service.stored_configuration.active == preset_panel
-    assert context.simulator.statuses == ["Воспроизведение будет добавлено позже"]
+    assert context.simulator.statuses == ["Кнопка 4 не настроена"]
+
+
+def test_press_sound_resolves_library_copy_and_starts_playback(
+    tmp_path: Path,
+) -> None:
+    context = ControllerContext(tmp_path)
+    source = tmp_path / "intro.wav"
+    source.write_bytes(b"wave")
+    context.dialogs.sound_path = source
+    context.controller.import_sound(0)
+    context.simulator.statuses.clear()
+
+    context.controller.press_sound(0)
+
+    sound = context.service.stored_configuration.active.sound_buttons[0]
+    path = context.sound_library.resolve(sound.sound_id or "")
+    assert path is not None
+    assert context.playback.played == [(0, path)]
+    assert context.simulator.statuses == ["Воспроизводится: intro"]
+
+
+def test_press_sound_handles_empty_button_missing_file_and_player_error(
+    tmp_path: Path,
+) -> None:
+    context = ControllerContext(tmp_path)
+
+    context.controller.press_sound(1)
+    assert context.simulator.statuses[-1] == "Кнопка 2 не настроена"
+    assert context.playback.played == []
+
+    source = tmp_path / "intro.mp3"
+    source.write_bytes(b"mp3")
+    context.dialogs.sound_path = source
+    context.controller.import_sound(0)
+    sound = context.service.stored_configuration.active.sound_buttons[0]
+    imported_path = context.sound_library.resolve(sound.sound_id or "")
+    assert imported_path is not None
+    imported_path.unlink()
+
+    context.controller.press_sound(0)
+    assert context.simulator.statuses[-1] == "Звуковой файл не найден: intro"
+
+    source.write_bytes(b"mp3")
+    context.dialogs.sound_path = source
+    context.controller.import_sound(0)
+    context.playback.play_error = RuntimeError("декодер недоступен")
+    context.controller.press_sound(0)
+    assert context.simulator.statuses[-1] == (
+        "Ошибка воспроизведения: декодер недоступен"
+    )
 
 
 def test_saving_to_occupied_preset_requires_confirmation(tmp_path: Path) -> None:

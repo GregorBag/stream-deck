@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QWidget,
 )
+import pytest
 from pytestqt.qtbot import QtBot
 
 from dj_poltorashka.configuration.models import (
@@ -129,12 +130,20 @@ def test_pause_emits_event_and_disables_all_other_controls(qtbot: QtBot) -> None
     assert simulator.widget.findChild(QSlider, "simulator_slider_0").isEnabled()
 
 
-def test_set_status_changes_visible_status(qtbot: QtBot) -> None:
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Воспроизводится: Заставка",
+        "Ошибка воспроизведения: файл не найден",
+    ),
+)
+def test_set_status_shows_playback_result(
+    qtbot: QtBot,
+    message: str,
+) -> None:
     simulator = PanelSimulator(lambda event: None)
     qtbot.addWidget(simulator.widget)
 
-    simulator.set_status("Панель подключена")
+    simulator.set_status(message)
 
-    assert simulator.widget.findChild(QLabel, "simulator_status").text() == (
-        "Панель подключена"
-    )
+    assert simulator.widget.findChild(QLabel, "simulator_status").text() == message

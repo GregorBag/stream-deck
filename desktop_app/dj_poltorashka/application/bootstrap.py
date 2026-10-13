@@ -33,6 +33,8 @@ from dj_poltorashka.configuration.repository import (
 from dj_poltorashka.configuration.service import ConfigurationService
 from dj_poltorashka.configuration.workspace import ConfigurationWorkspace
 from dj_poltorashka.sounds.library import SoundLibrary
+from dj_poltorashka.sounds.playback import SoundPlaybackService
+from dj_poltorashka.sounds.qt_player import QtSoundPlayerFactory
 from dj_poltorashka.ui.dialog_service import DialogService
 from dj_poltorashka.ui.main_window import MainWindow, MainWindowCallbacks
 from dj_poltorashka.ui.panel_simulator import PanelSimulator
@@ -62,6 +64,7 @@ class RunningApplication:
     settings_dialog: SettingsDialog
     tray: TrayController
     audio_coordinator: AudioCoordinator
+    sound_playback: SoundPlaybackService
     controller: AppController
     single_instance: SingleInstanceController
     draft_available: bool
@@ -72,6 +75,7 @@ class RunningApplication:
         if self._closed:
             return
         self._closed = True
+        self.sound_playback.close()
         self.audio_coordinator.close()
         self.tray.hide()
         self.main_window.hide()
@@ -149,6 +153,23 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         )
     )
     simulator = PanelSimulator(lambda event: controller().handle_panel_event(event))
+
+    def report_sound_error(button_index: int, message: str) -> None:
+        _LOGGER.error(
+            "Ошибка звуковой кнопки %s: %s",
+            button_index + 1,
+            message,
+        )
+        simulator.set_status(f"Ошибка воспроизведения: {message}")
+
+    sound_playback = SoundPlaybackService(
+        QtSoundPlayerFactory(),
+        lambda index, path: simulator.set_status(
+            f"Воспроизводится: {path.stem}"
+        ),
+        lambda index: simulator.set_status("Воспроизведение завершено"),
+        report_sound_error,
+    )
     dialogs = DialogService(main_window.widget)
 
     def report_audio_error(message: str) -> None:
@@ -189,6 +210,7 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         settings_dialog=settings_dialog,
         tray=tray,
         audio_coordinator=audio_coordinator,
+        sound_playback=sound_playback,
         quit_application=application.quit,
     )
     controller_reference.append(app_controller)
@@ -205,6 +227,7 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         settings_dialog=settings_dialog,
         tray=tray,
         audio_coordinator=audio_coordinator,
+        sound_playback=sound_playback,
         controller=app_controller,
         single_instance=SingleInstanceController(),
         draft_available=draft_available,
