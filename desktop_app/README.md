@@ -77,6 +77,25 @@ Qt. Документация: [QStandardPaths](https://doc.qt.io/qtforpython-6/P
 python -m pytest -q
 ```
 
+## Сборка Windows-приложения
+
+Установите зависимости сборки и запустите скрипт из каталога `desktop_app`:
+
+```powershell
+python -m pip install -e ".[dev,build]"
+powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
+```
+
+Готовое приложение находится по пути
+`dist\DJ Poltorashka\DJ Poltorashka.exe`. Фоновый запуск:
+
+```powershell
+& ".\dist\DJ Poltorashka\DJ Poltorashka.exe" --background
+```
+
+Это one-folder сборка: для переноса нужен весь каталог `DJ Poltorashka`, а не
+только `.exe`. Установщик и цифровая подпись на этом этапе не создаются.
+
 ## Ограничения текущего этапа
 
 - протокол обмена с физической панелью ещё не подключён;
