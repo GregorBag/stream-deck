@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 
+from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.configuration.models import (
     MixerChannelConfig,
     PanelConfiguration,
@@ -207,6 +208,47 @@ def test_render_displays_channels_sounds_and_presets_without_callbacks(
     assert main_window.widget.findChild(QLabel, "preset_name_0").text() == "Работа"
     assert main_window.widget.findChild(QPushButton, "preset_load_0").isEnabled()
     assert not main_window.widget.findChild(QPushButton, "preset_load_1").isEnabled()
+    assert recorder.calls == []
+
+
+def test_render_displays_audio_runtime_states_and_endpoint_names(
+    qtbot: QtBot,
+) -> None:
+    recorder = CallbackRecorder()
+    main_window = MainWindow(recorder.callbacks())
+    qtbot.addWidget(main_window.widget)
+    states = (
+        ChannelAudioUpdate(1, 0.65, True, "active", "Динамики", False),
+        ChannelAudioUpdate(2, 0.4, False, "waiting", "Player", False),
+        ChannelAudioUpdate(
+            3,
+            0.8,
+            False,
+            "unavailable",
+            "USB-микрофон",
+            False,
+        ),
+    )
+
+    main_window.render(make_stored_configuration(), states)
+
+    assert main_window.widget.findChild(QLabel, "channel_name_1").text() == (
+        "Динамики"
+    )
+    assert main_window.widget.findChild(QLabel, "channel_status_1").text() == (
+        "Активно"
+    )
+    assert main_window.widget.findChild(QLabel, "channel_status_2").text() == (
+        "Ожидание программы"
+    )
+    assert main_window.widget.findChild(QSlider, "volume_slider_2").isEnabled()
+    assert main_window.widget.findChild(QPushButton, "mute_button_2").isEnabled()
+    assert main_window.widget.findChild(QLabel, "channel_name_3").text() == (
+        "USB-микрофон"
+    )
+    assert main_window.widget.findChild(QLabel, "channel_status_3").text() == (
+        "Временно недоступно"
+    )
     assert recorder.calls == []
 
 

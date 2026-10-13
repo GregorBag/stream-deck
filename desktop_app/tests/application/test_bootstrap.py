@@ -12,6 +12,41 @@ from dj_poltorashka.configuration.defaults import (
 from dj_poltorashka.configuration.repository import ConfigurationPaths
 
 
+class RecordingAudioBackend:
+    pass
+
+
+class RecordingAudioService:
+    def __init__(self, backend) -> None:
+        self.backend = backend
+
+
+class RecordingAudioCoordinator:
+    instances: list["RecordingAudioCoordinator"] = []
+
+    def __init__(self, service, on_updates, on_error) -> None:
+        self.service = service
+        self.on_updates = on_updates
+        self.on_error = on_error
+        self.started = []
+        self.applied = []
+        self.adopted = []
+        self.close_count = 0
+        self.instances.append(self)
+
+    def start(self, panel) -> None:
+        self.started.append(panel)
+
+    def apply_configuration(self, panel) -> None:
+        self.applied.append(panel)
+
+    def adopt_channel(self, panel, channel_index: int) -> None:
+        self.adopted.append((panel, channel_index))
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
 def test_parse_arguments_defaults_to_visible_start() -> None:
     options = bootstrap.parse_arguments([])
 
@@ -48,6 +83,65 @@ def test_build_sets_qt_names_before_resolving_paths(
 
     assert running.paths.root == requested_root
     running.close()
+
+
+def test_build_assembles_audio_layer_and_closes_it_once(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    RecordingAudioCoordinator.instances.clear()
+    monkeypatch.setattr(bootstrap, "WindowsAudioBackend", RecordingAudioBackend)
+    monkeypatch.setattr(bootstrap, "AudioService", RecordingAudioService)
+    monkeypatch.setattr(
+        bootstrap,
+        "AudioCoordinator",
+        RecordingAudioCoordinator,
+    )
+
+    running = bootstrap.build_application(tmp_path)
+    coordinator = RecordingAudioCoordinator.instances[-1]
+    running.controller.start(background=True, draft_available=False)
+
+    assert isinstance(coordinator.service.backend, RecordingAudioBackend)
+    assert running.audio_coordinator is coordinator
+    assert coordinator.started == [
+        running.configuration_service.stored_configuration.active
+    ]
+
+    running.close()
+    running.close()
+    assert coordinator.close_count == 1
+
+
+def test_audio_backend_startup_error_uses_unavailable_backend(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    RecordingAudioCoordinator.instances.clear()
+
+    def fail_backend():
+        raise RuntimeError("Core Audio недоступен")
+
+    monkeypatch.setattr(bootstrap, "WindowsAudioBackend", fail_backend)
+    monkeypatch.setattr(
+        bootstrap,
+        "AudioCoordinator",
+        RecordingAudioCoordinator,
+    )
+
+    running = bootstrap.build_application(tmp_path)
+    try:
+        coordinator = RecordingAudioCoordinator.instances[-1]
+        assert running.startup_errors == (
+            ("Аудиосистема", "Core Audio недоступен"),
+        )
+        assert type(coordinator.service._backend).__name__ == (
+            "UnavailableAudioBackend"
+        )
+    finally:
+        running.close()
 
 
 def test_corrupt_configuration_is_preserved_and_default_is_loaded(

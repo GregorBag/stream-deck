@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.configuration.models import ChannelKind, StoredConfiguration
 from dj_poltorashka.ui.channel_card import ChannelCard
 from dj_poltorashka.ui.preset_card import PresetCard
@@ -103,13 +104,23 @@ class MainWindow:
     def widget(self) -> QMainWindow:
         return self._widget
 
-    def render(self, stored: StoredConfiguration) -> None:
-        for card, channel in zip(
-            self._channel_cards,
-            stored.active.channels,
-            strict=True,
+    def render(
+        self,
+        stored: StoredConfiguration,
+        audio_states: tuple[ChannelAudioUpdate, ...] = (),
+    ) -> None:
+        states_by_index = {
+            state.channel_index: state
+            for state in audio_states
+        }
+        for index, (card, channel) in enumerate(
+            zip(
+                self._channel_cards,
+                stored.active.channels,
+                strict=True,
+            )
         ):
-            card.render(channel)
+            card.render(channel, states_by_index.get(index))
         for button, sound in zip(
             self._sound_buttons,
             stored.active.sound_buttons,

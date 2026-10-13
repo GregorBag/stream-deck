@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.configuration.models import ChannelKind, MixerChannelConfig
 
 
@@ -48,6 +49,10 @@ class ChannelCard:
         self._name_label = QLabel("Не назначен")
         self._name_label.setObjectName(f"channel_name_{channel_index}")
         layout.addWidget(self._name_label)
+
+        self._status_label = QLabel("")
+        self._status_label.setObjectName(f"channel_status_{channel_index}")
+        layout.addWidget(self._status_label)
 
         self._application_button = QPushButton("Выбрать .exe")
         self._application_button.setObjectName(
@@ -85,7 +90,11 @@ class ChannelCard:
     def widget(self) -> QGroupBox:
         return self._widget
 
-    def render(self, channel: MixerChannelConfig) -> None:
+    def render(
+        self,
+        channel: MixerChannelConfig,
+        audio_state: ChannelAudioUpdate | None = None,
+    ) -> None:
         blockers = (
             QSignalBlocker(self._kind_combo),
             QSignalBlocker(self._volume_slider),
@@ -94,7 +103,11 @@ class ChannelCard:
         self._kind_combo.setCurrentIndex(
             self._kind_combo.findData(channel.channel_kind)
         )
-        self._name_label.setText(self._display_name(channel))
+        display_name = self._display_name(channel)
+        if audio_state is not None and audio_state.display_name is not None:
+            display_name = audio_state.display_name
+        self._name_label.setText(display_name)
+        self._status_label.setText(self._status_text(audio_state))
         self._volume_slider.setValue(round(channel.volume * 100))
         self._mute_button.setChecked(channel.muted)
 
@@ -103,6 +116,16 @@ class ChannelCard:
         self._mute_button.setEnabled(is_assigned)
         self._application_button.setEnabled(channel.channel_kind == "application")
         del blockers
+
+    @staticmethod
+    def _status_text(audio_state: ChannelAudioUpdate | None) -> str:
+        if audio_state is None:
+            return ""
+        return {
+            "active": "Активно",
+            "waiting": "Ожидание программы",
+            "unavailable": "Временно недоступно",
+        }[audio_state.availability]
 
     @staticmethod
     def _display_name(channel: MixerChannelConfig) -> str:

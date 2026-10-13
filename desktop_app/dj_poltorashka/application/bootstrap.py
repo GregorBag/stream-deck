@@ -1,7 +1,8 @@
 """Сборка и запуск настольного приложения."""
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import logging
 from pathlib import Path
 from collections.abc import Sequence
 import sys
@@ -18,6 +19,9 @@ from dj_poltorashka.application.autostart import (
 from dj_poltorashka.application.logging_setup import configure_logging
 from dj_poltorashka.application.settings_controller import SettingsController
 from dj_poltorashka.application.single_instance import SingleInstanceController
+from dj_poltorashka.audio.service import AudioService, UnavailableAudioBackend
+from dj_poltorashka.audio.windows_backend import WindowsAudioBackend
+from dj_poltorashka.audio.worker import AudioCoordinator
 from dj_poltorashka.configuration.defaults import (
     create_default_stored_configuration,
 )
@@ -37,6 +41,7 @@ from dj_poltorashka.ui.tray_controller import TrayCallbacks, TrayController
 
 
 _APPLICATION_NAME = "DJ Poltorashka"
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -56,12 +61,18 @@ class RunningApplication:
     dialogs: DialogService
     settings_dialog: SettingsDialog
     tray: TrayController
+    audio_coordinator: AudioCoordinator
     controller: AppController
     single_instance: SingleInstanceController
     draft_available: bool
     startup_errors: tuple[tuple[str, str], ...]
+    _closed: bool = field(default=False, init=False, repr=False)
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self.audio_coordinator.close()
         self.tray.hide()
         self.main_window.hide()
         self.simulator.hide()
@@ -102,6 +113,13 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         repository,
         sound_library,
     )
+    try:
+        audio_backend = WindowsAudioBackend()
+    except Exception as error:
+        message = str(error).strip() or type(error).__name__
+        startup_errors.append(("Аудиосистема", message))
+        audio_backend = UnavailableAudioBackend(message)
+    audio_service = AudioService(audio_backend)
     controller_reference: list[AppController] = []
 
     def controller() -> AppController:
@@ -132,6 +150,16 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
     )
     simulator = PanelSimulator(lambda event: controller().handle_panel_event(event))
     dialogs = DialogService(main_window.widget)
+
+    def report_audio_error(message: str) -> None:
+        _LOGGER.error("Ошибка аудиосистемы: %s", message)
+        dialogs.show_error("Аудиосистема", message)
+
+    audio_coordinator = AudioCoordinator(
+        audio_service,
+        lambda updates: controller().handle_audio_updates(updates),
+        report_audio_error,
+    )
     autostart = WindowsAutostart(
         build_background_command(
             Path(sys.executable),
@@ -160,6 +188,7 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         dialogs=dialogs,
         settings_dialog=settings_dialog,
         tray=tray,
+        audio_coordinator=audio_coordinator,
         quit_application=application.quit,
     )
     controller_reference.append(app_controller)
@@ -175,6 +204,7 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         dialogs=dialogs,
         settings_dialog=settings_dialog,
         tray=tray,
+        audio_coordinator=audio_coordinator,
         controller=app_controller,
         single_instance=SingleInstanceController(),
         draft_available=draft_available,

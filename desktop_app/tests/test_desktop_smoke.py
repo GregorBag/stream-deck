@@ -6,7 +6,16 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QPushButton, QSlider
 from pytestqt.qtbot import QtBot
 
-from dj_poltorashka.application.bootstrap import build_application
+import dj_poltorashka.application.bootstrap as bootstrap
+from dj_poltorashka.audio.models import AudioTargetSnapshot
+
+
+class FakeAudioBackend:
+    def read_target(self, target) -> AudioTargetSnapshot:
+        return AudioTargetSnapshot(())
+
+    def write_target(self, target, volume: float, muted: bool) -> None:
+        return None
 
 
 def test_desktop_configuration_round_trip(
@@ -14,7 +23,8 @@ def test_desktop_configuration_round_trip(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    running = build_application(tmp_path)
+    monkeypatch.setattr(bootstrap, "WindowsAudioBackend", FakeAudioBackend)
+    running = bootstrap.build_application(tmp_path)
     qtbot.addWidget(running.main_window.widget)
     qtbot.addWidget(running.simulator.widget)
     try:
