@@ -1,7 +1,9 @@
 """Координация пользовательского интерфейса и конфигурации приложения."""
 
+from dataclasses import replace
 from pathlib import Path
 
+from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.configuration.models import (
     ChannelKind,
     MixerChannelConfig,
@@ -23,6 +25,7 @@ class AppController:
         dialogs,
         settings_dialog,
         tray,
+        audio_coordinator,
         quit_application,
     ):
         self._configuration_service = configuration_service
@@ -33,7 +36,9 @@ class AppController:
         self._dialogs = dialogs
         self._settings_dialog = settings_dialog
         self._tray = tray
+        self._audio_coordinator = audio_coordinator
         self._quit_application = quit_application
+        self._audio_states: dict[int, ChannelAudioUpdate] = {}
         self._event_router = PanelEventRouter(
             self.set_volume,
             self.toggle_mute,
@@ -51,6 +56,7 @@ class AppController:
             except (OSError, ValueError, LookupError) as error:
                 self._dialogs.show_error("Восстановление", str(error))
 
+        self._audio_coordinator.start(self._active_configuration)
         self._refresh()
         self._tray.show()
         if not background:
@@ -105,7 +111,14 @@ class AppController:
             channel_index,
             channel,
         )
-        self._replace_active(panel, "Конфигурация")
+        if not self._replace_active(
+            panel,
+            "Конфигурация",
+            sync_audio=channel_kind != "application",
+        ):
+            return
+        if channel_kind == "application":
+            self._audio_coordinator.adopt_channel(panel, channel_index)
 
     def import_sound(self, button_index: int) -> None:
         source = self._dialogs.choose_sound_file()
@@ -134,9 +147,11 @@ class AppController:
 
     def load_preset(self, preset_index: int) -> None:
         try:
-            self._configuration_service.load_preset(preset_index + 1)
+            panel = self._configuration_service.load_preset(preset_index + 1)
         except (OSError, ValueError, LookupError) as error:
             self._dialogs.show_error("Пресет", str(error))
+        else:
+            self._audio_coordinator.apply_configuration(panel)
         self._refresh()
 
     def save_active_to_preset(self) -> bool:
@@ -167,6 +182,43 @@ class AppController:
 
     def press_sound(self, button_index: int) -> None:
         self._simulator.set_status("Воспроизведение будет добавлено позже")
+
+    def handle_audio_updates(
+        self,
+        updates: tuple[ChannelAudioUpdate, ...],
+    ) -> None:
+        channel_count = len(self._active_configuration.channels)
+        valid_updates = tuple(
+            update
+            for update in updates
+            if 0 <= update.channel_index < channel_count
+        )
+        for update in valid_updates:
+            self._audio_states[update.channel_index] = update
+
+        panel = self._active_configuration
+        externally_changed = False
+        for update in valid_updates:
+            if not update.externally_changed:
+                continue
+            channel = replace(
+                panel.channels[update.channel_index],
+                volume=update.volume,
+                muted=update.muted,
+            )
+            panel = self._editor.set_channel(
+                panel,
+                update.channel_index,
+                channel,
+            )
+            externally_changed = True
+
+        if externally_changed:
+            try:
+                self._configuration_service.replace_active(panel)
+            except (OSError, ValueError) as error:
+                self._dialogs.show_error("Аудиосистема", str(error))
+        self._refresh()
 
     def handle_panel_event(self, event) -> None:
         self._event_router.route(event)
@@ -206,16 +258,31 @@ class AppController:
     def _active_configuration(self):
         return self._configuration_service.stored_configuration.active
 
-    def _replace_active(self, panel, error_title: str) -> None:
+    def _replace_active(
+        self,
+        panel,
+        error_title: str,
+        sync_audio: bool = True,
+    ) -> bool:
         try:
             self._configuration_service.replace_active(panel)
         except (OSError, ValueError) as error:
             self._dialogs.show_error(error_title, str(error))
+            replaced = False
+        else:
+            replaced = True
+            if sync_audio:
+                self._audio_coordinator.apply_configuration(panel)
         self._refresh()
+        return replaced
 
     def _refresh(self) -> None:
         stored = self._configuration_service.stored_configuration
-        self._main_window.render(stored)
+        audio_states = tuple(
+            self._audio_states[index]
+            for index in sorted(self._audio_states)
+        )
+        self._main_window.render(stored, audio_states)
         self._simulator.render(stored.active)
 
     def _finish_exit(self) -> None:

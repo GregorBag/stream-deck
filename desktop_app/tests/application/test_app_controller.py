@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from dj_poltorashka.application.app_controller import AppController
+from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.configuration.defaults import (
     create_default_stored_configuration,
 )
@@ -54,12 +55,18 @@ class InMemoryRepository:
 class RecordingMainWindow:
     def __init__(self) -> None:
         self.rendered: list[StoredConfiguration] = []
+        self.audio_states: list[tuple[ChannelAudioUpdate, ...]] = []
         self.show_count = 0
         self.hide_count = 0
         self.activate_count = 0
 
-    def render(self, stored: StoredConfiguration) -> None:
+    def render(
+        self,
+        stored: StoredConfiguration,
+        audio_states: tuple[ChannelAudioUpdate, ...] = (),
+    ) -> None:
         self.rendered.append(stored)
+        self.audio_states.append(audio_states)
 
     def show(self) -> None:
         self.show_count += 1
@@ -142,6 +149,26 @@ class FakeTray:
         self.hide_count += 1
 
 
+class FakeAudioCoordinator:
+    def __init__(self) -> None:
+        self.started: list[PanelConfiguration] = []
+        self.applied: list[PanelConfiguration] = []
+        self.adopted: list[tuple[PanelConfiguration, int]] = []
+
+    def start(self, panel: PanelConfiguration) -> None:
+        self.started.append(panel)
+
+    def apply_configuration(self, panel: PanelConfiguration) -> None:
+        self.applied.append(panel)
+
+    def adopt_channel(
+        self,
+        panel: PanelConfiguration,
+        channel_index: int,
+    ) -> None:
+        self.adopted.append((panel, channel_index))
+
+
 class ControllerContext:
     def __init__(self, tmp_path: Path, stored: StoredConfiguration | None = None):
         initial = stored or create_default_stored_configuration()
@@ -157,6 +184,7 @@ class ControllerContext:
         self.dialogs = FakeDialogs()
         self.settings = FakeSettingsDialog()
         self.tray = FakeTray()
+        self.audio = FakeAudioCoordinator()
         self.quit_count = 0
         self.controller = AppController(
             configuration_service=self.service,
@@ -167,6 +195,7 @@ class ControllerContext:
             dialogs=self.dialogs,
             settings_dialog=self.settings,
             tray=self.tray,
+            audio_coordinator=self.audio,
             quit_application=self.quit_application,
         )
 
@@ -175,6 +204,7 @@ class ControllerContext:
 
     def clear_renders(self) -> None:
         self.main_window.rendered.clear()
+        self.main_window.audio_states.clear()
         self.simulator.rendered.clear()
 
 
@@ -191,11 +221,13 @@ def test_volume_mute_and_channel_changes_update_service_and_both_views(
 
     context.controller.set_volume(0, 0.3)
     assert context.service.stored_configuration.active.channels[0].volume == 0.3
+    assert context.audio.applied[-1] == context.service.stored_configuration.active
     assert_views_show_service_state(context)
 
     context.clear_renders()
     context.controller.toggle_mute(0)
     assert context.service.stored_configuration.active.channels[0].muted
+    assert context.audio.applied[-1] == context.service.stored_configuration.active
     assert_views_show_service_state(context)
 
     context.clear_renders()
@@ -203,6 +235,7 @@ def test_volume_mute_and_channel_changes_update_service_and_both_views(
     assert context.service.stored_configuration.active.channels[1].channel_kind == (
         "microphone"
     )
+    assert context.audio.applied[-1] == context.service.stored_configuration.active
     assert_views_show_service_state(context)
 
 
@@ -239,6 +272,7 @@ def test_load_preset_uses_zero_based_index_and_refreshes_views(tmp_path: Path) -
     context.controller.load_preset(1)
 
     assert context.service.stored_configuration.active == preset_panel
+    assert context.audio.applied == [preset_panel]
     assert_views_show_service_state(context)
 
 
@@ -285,6 +319,17 @@ def test_cancelled_application_selection_restores_actual_view_state(
     assert_views_show_service_state(context)
 
 
+def test_application_assignment_adopts_only_selected_channel(tmp_path: Path) -> None:
+    context = ControllerContext(tmp_path)
+    context.dialogs.application_path = Path("C:/Apps/Player.exe")
+
+    context.controller.set_channel(2, "application")
+
+    panel = context.service.stored_configuration.active
+    assert context.audio.applied == []
+    assert context.audio.adopted == [(panel, 2)]
+
+
 @pytest.mark.parametrize(
     ("background", "expected_window_count"),
     ((False, 1), (True, 0)),
@@ -300,6 +345,7 @@ def test_start_always_shows_tray_and_only_opens_window_when_requested(
 
     assert context.tray.show_count == 1
     assert context.main_window.show_count == expected_window_count
+    assert context.audio.started == [context.service.stored_configuration.active]
     assert_views_show_service_state(context)
 
 
@@ -322,6 +368,47 @@ def test_start_resolves_recovery_draft_before_rendering(
     expected = draft if restore else context.service.stored_configuration.baseline
     assert context.service.stored_configuration.active == expected
     assert context.repository.draft == (draft if restore else None)
+    assert context.audio.started == [expected]
+    assert_views_show_service_state(context)
+
+
+def test_external_audio_change_updates_draft_without_echo(tmp_path: Path) -> None:
+    context = ControllerContext(tmp_path)
+    update = ChannelAudioUpdate(0, 0.25, True, "active", "Динамики", True)
+
+    context.controller.handle_audio_updates((update,))
+
+    active = context.service.stored_configuration.active
+    assert active.channels[0].volume == 0.25
+    assert active.channels[0].muted
+    assert context.service.is_dirty
+    assert context.repository.draft == active
+    assert context.audio.applied == []
+    assert context.main_window.audio_states == [(update,)]
+    assert_views_show_service_state(context)
+
+
+def test_status_only_audio_update_does_not_change_configuration(
+    tmp_path: Path,
+) -> None:
+    context = ControllerContext(tmp_path)
+    original = context.service.stored_configuration
+    update = ChannelAudioUpdate(
+        0,
+        1.0,
+        False,
+        "unavailable",
+        "Динамики",
+        False,
+    )
+
+    context.controller.handle_audio_updates((update,))
+
+    assert context.service.stored_configuration == original
+    assert not context.service.is_dirty
+    assert context.repository.draft is None
+    assert context.audio.applied == []
+    assert context.main_window.audio_states == [(update,)]
     assert_views_show_service_state(context)
 
 
