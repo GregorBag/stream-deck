@@ -209,6 +209,9 @@ class FakeAudioOutput:
     def setDevice(self, device) -> None:
         self.devices.append(device)
 
+    def setVolume(self, volume: float) -> None:
+        self.volume = volume
+
     def deleteLater(self) -> None:
         self.deleted += 1
 
@@ -256,7 +259,7 @@ def make_qt_factory(devices: FakeMediaDevices) -> QtSoundPlayerFactory:
     )
 
 
-def test_qt_player_uses_local_file_and_reports_finish_and_error(
+def test_qt_player_uses_local_file_and_ignores_error_after_finish(
     tmp_path: Path,
 ) -> None:
     devices = FakeMediaDevices()
@@ -282,7 +285,7 @@ def test_qt_player_uses_local_file_and_reports_finish_and_error(
     media.mediaStatusChanged.emit(QMediaPlayer.MediaStatus.EndOfMedia)
     media.errorOccurred.emit(QMediaPlayer.Error.ResourceError, "bad file")
     assert finished == ["finished"]
-    assert errors == ["bad file"]
+    assert errors == []
 
 
 def test_qt_factory_updates_default_output_for_every_active_player(
