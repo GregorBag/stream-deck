@@ -4,7 +4,7 @@ import argparse
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 import sys
 
 from PySide6.QtCore import QCoreApplication
@@ -20,6 +20,13 @@ from dj_poltorashka.application.logging_setup import configure_logging
 from dj_poltorashka.application.settings_controller import SettingsController
 from dj_poltorashka.application.single_instance import SingleInstanceController
 from dj_poltorashka.audio.service import AudioService, UnavailableAudioBackend
+from dj_poltorashka.audio.device_registry import QtAudioDeviceRegistry
+from dj_poltorashka.audio.routing_models import AudioRoutingStatus
+from dj_poltorashka.audio.routing_service import AudioRoutingService
+from dj_poltorashka.audio.routing_settings import (
+    AudioRoutingSettings,
+    AudioRoutingSettingsRepository,
+)
 from dj_poltorashka.audio.windows_backend import WindowsAudioBackend
 from dj_poltorashka.audio.worker import AudioCoordinator
 from dj_poltorashka.configuration.defaults import (
@@ -65,6 +72,8 @@ class RunningApplication:
     tray: TrayController
     audio_coordinator: AudioCoordinator
     sound_playback: SoundPlaybackService
+    audio_routing_service: AudioRoutingService
+    audio_device_registry: QtAudioDeviceRegistry
     controller: AppController
     single_instance: SingleInstanceController
     draft_available: bool
@@ -76,6 +85,7 @@ class RunningApplication:
             return
         self._closed = True
         self.sound_playback.close()
+        self.audio_routing_service.close()
         self.audio_coordinator.close()
         self.tray.hide()
         self.main_window.hide()
@@ -99,6 +109,12 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
     repository = ConfigurationRepository(paths)
     default = create_default_stored_configuration()
     startup_errors: list[tuple[str, str]] = []
+    routing_repository = AudioRoutingSettingsRepository(paths.settings_file)
+    try:
+        routing_settings = routing_repository.load()
+    except (OSError, ValueError) as error:
+        routing_settings = AudioRoutingSettings()
+        startup_errors.append(("Виртуальный микрофон", str(error)))
     try:
         stored = repository.load(default)
     except (OSError, ValueError) as error:
@@ -154,6 +170,23 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
     )
     simulator = PanelSimulator(lambda event: controller().handle_panel_event(event))
 
+    routing_status_consumers: list[Callable[[AudioRoutingStatus], None]] = []
+
+    def report_routing_status(status: AudioRoutingStatus) -> None:
+        if status.code == "pipeline_error":
+            _LOGGER.error("Ошибка виртуального микрофона: %s", status.message)
+        elif status.code != "active":
+            _LOGGER.warning("Виртуальный микрофон: %s", status.message)
+        for consumer in tuple(routing_status_consumers):
+            consumer(status)
+
+    audio_device_registry = QtAudioDeviceRegistry()
+    audio_routing_service = AudioRoutingService(
+        audio_device_registry,
+        routing_settings,
+        report_routing_status,
+    )
+
     def report_sound_error(button_index: int, message: str) -> None:
         _LOGGER.error(
             "Ошибка звуковой кнопки %s: %s",
@@ -162,8 +195,19 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         )
         simulator.set_status(f"Ошибка воспроизведения: {message}")
 
+    settings_controller_reference: list[SettingsController] = []
+
+    def current_mix_gains() -> tuple[float, float]:
+        current = settings_controller_reference[0].routing_settings()
+        return current.microphone_gain, current.sound_gain
+
     sound_playback = SoundPlaybackService(
-        QtSoundPlayerFactory(),
+        QtSoundPlayerFactory(
+            monitor_device_provider=audio_routing_service.monitor_device,
+            cable_device_provider=audio_routing_service.cable_device,
+            mix_gains_provider=current_mix_gains,
+            on_routing_error=audio_routing_service.report_pipeline_error,
+        ),
         lambda index, path: simulator.set_status(
             f"Воспроизводится: {path.stem}"
         ),
@@ -187,8 +231,15 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
             packaged=bool(getattr(sys, "frozen", False)),
         )
     )
+    settings_controller = SettingsController(
+        autostart,
+        routing_repository,
+        audio_device_registry,
+        audio_routing_service.apply,
+    )
+    settings_controller_reference.append(settings_controller)
     settings_dialog = SettingsDialog(
-        SettingsController(autostart),
+        settings_controller,
         dialogs.show_error,
         main_window.widget,
     )
@@ -200,6 +251,14 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
             exit_application=lambda: controller().request_exit(),
         )
     )
+    routing_status_consumers.extend(
+        (
+            main_window.set_virtual_microphone_status,
+            settings_dialog.set_virtual_microphone_status,
+            tray.set_virtual_microphone_status,
+        )
+    )
+    audio_routing_service.start()
     app_controller = AppController(
         configuration_service=configuration_service,
         editor=PanelConfigurationEditor(),
@@ -228,6 +287,8 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         tray=tray,
         audio_coordinator=audio_coordinator,
         sound_playback=sound_playback,
+        audio_routing_service=audio_routing_service,
+        audio_device_registry=audio_device_registry,
         controller=app_controller,
         single_instance=SingleInstanceController(),
         draft_available=draft_available,

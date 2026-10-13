@@ -2,6 +2,7 @@ import pytest
 from PySide6.QtWidgets import QSystemTrayIcon
 from pytestqt.qtbot import QtBot
 
+from dj_poltorashka.audio.routing_models import AudioRoutingStatus
 from dj_poltorashka.ui.tray_controller import TrayController, TrayCallbacks
 
 
@@ -92,3 +93,15 @@ def test_show_and_hide_change_icon_visibility(qtbot: QtBot) -> None:
 
     tray.hide()
     assert not tray.icon.isVisible()
+
+
+def test_tray_tooltip_displays_virtual_microphone_status(qtbot: QtBot) -> None:
+    tray = TrayController(CallbackRecorder().callbacks())
+
+    tray.set_virtual_microphone_status(
+        AudioRoutingStatus("active", "Виртуальный микрофон активен")
+    )
+
+    assert tray.icon.toolTip() == (
+        "DJ Poltorashka — Виртуальный микрофон активен"
+    )

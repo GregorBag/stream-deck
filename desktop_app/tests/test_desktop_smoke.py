@@ -19,7 +19,8 @@ class FakeAudioBackend:
 
 
 class FakeSoundPlayerFactory:
-    pass
+    def __init__(self, *args, **kwargs) -> None:
+        pass
 
 
 def test_desktop_configuration_round_trip(

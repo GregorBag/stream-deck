@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 
 from dj_poltorashka.audio.models import ChannelAudioUpdate
+from dj_poltorashka.audio.routing_models import AudioRoutingStatus
 from dj_poltorashka.configuration.models import (
     MixerChannelConfig,
     PanelConfiguration,
@@ -296,3 +297,15 @@ def test_editor_controls_forward_zero_based_actions(qtbot: QtBot) -> None:
         ("save_preset",),
         ("load_preset", 0),
     ]
+
+
+def test_main_window_displays_virtual_microphone_status(qtbot: QtBot) -> None:
+    main_window = MainWindow(make_callbacks())
+    qtbot.addWidget(main_window.widget)
+
+    main_window.set_virtual_microphone_status(
+        AudioRoutingStatus("cable_missing", "VB-CABLE не найден")
+    )
+
+    label = main_window.widget.findChild(QLabel, "virtual_microphone_status")
+    assert label.text() == "Виртуальный микрофон: VB-CABLE не найден"

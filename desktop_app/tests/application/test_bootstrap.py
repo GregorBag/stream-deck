@@ -55,7 +55,9 @@ class RecordingAudioCoordinator:
 
 
 class RecordingSoundPlayerFactory:
-    pass
+    def __init__(self, *args, **kwargs) -> None:
+        self.arguments = args
+        self.keyword_arguments = kwargs
 
 
 class RecordingSoundPlayback:
@@ -206,6 +208,75 @@ def test_build_assembles_playback_callbacks_and_closes_once(
     running.close()
     running.close()
     assert playback.close_count == 1
+
+
+class RecordingDeviceRegistry:
+    instances: list["RecordingDeviceRegistry"] = []
+
+    def __init__(self) -> None:
+        self.close_count = 0
+        self.instances.append(self)
+
+    def inputs(self) -> tuple[object, ...]:
+        return ()
+
+    def outputs(self) -> tuple[object, ...]:
+        return ()
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
+class RecordingRoutingService:
+    instances: list["RecordingRoutingService"] = []
+
+    def __init__(self, registry, settings, on_status) -> None:
+        self.registry = registry
+        self.settings = settings
+        self.on_status = on_status
+        self.start_count = 0
+        self.close_count = 0
+        self.instances.append(self)
+
+    def start(self) -> None:
+        self.start_count += 1
+
+    def apply(self, settings) -> None:
+        self.settings = settings
+
+    def monitor_device(self):
+        return None
+
+    def cable_device(self):
+        return None
+
+    def report_pipeline_error(self, message: str) -> None:
+        return None
+
+    def close(self) -> None:
+        self.close_count += 1
+        self.registry.close()
+
+
+def test_build_starts_and_closes_routing_layer_once(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    RecordingDeviceRegistry.instances.clear()
+    RecordingRoutingService.instances.clear()
+    monkeypatch.setattr(bootstrap, "QtAudioDeviceRegistry", RecordingDeviceRegistry)
+    monkeypatch.setattr(bootstrap, "AudioRoutingService", RecordingRoutingService)
+
+    running = bootstrap.build_application(tmp_path)
+    routing = RecordingRoutingService.instances[-1]
+    registry = RecordingDeviceRegistry.instances[-1]
+
+    assert routing.start_count == 1
+    running.close()
+    running.close()
+    assert routing.close_count == 1
+    assert registry.close_count == 1
 
 
 def test_corrupt_configuration_is_preserved_and_default_is_loaded(

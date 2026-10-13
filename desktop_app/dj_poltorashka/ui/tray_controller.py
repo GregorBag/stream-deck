@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon,
 )
 
+from dj_poltorashka.audio.routing_models import AudioRoutingStatus
+
 
 @dataclass(frozen=True)
 class TrayCallbacks:
@@ -58,6 +60,9 @@ class TrayController:
 
     def show_message(self, title: str, message: str) -> None:
         self._icon.showMessage(title, message)
+
+    def set_virtual_microphone_status(self, state: AudioRoutingStatus) -> None:
+        self._icon.setToolTip(f"DJ Poltorashka — {state.message}")
 
     @staticmethod
     def _handle_activation(

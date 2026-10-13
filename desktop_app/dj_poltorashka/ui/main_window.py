@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QPushButton,
     QVBoxLayout,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from dj_poltorashka.audio.models import ChannelAudioUpdate
+from dj_poltorashka.audio.routing_models import AudioRoutingStatus
 from dj_poltorashka.configuration.models import ChannelKind, StoredConfiguration
 from dj_poltorashka.ui.channel_card import ChannelCard
 from dj_poltorashka.ui.preset_card import PresetCard
@@ -51,6 +53,11 @@ class MainWindow:
         active_group = QGroupBox("Активная настройка")
         active_group.setObjectName("active_configuration")
         active_layout = QVBoxLayout(active_group)
+        self._virtual_microphone_status = QLabel(
+            "Виртуальный микрофон: состояние ещё не определено"
+        )
+        self._virtual_microphone_status.setObjectName("virtual_microphone_status")
+        active_layout.addWidget(self._virtual_microphone_status)
         save_button = QPushButton("Сохранить в пресет")
         save_button.setObjectName("save_preset_button")
         save_button.clicked.connect(callbacks.save_preset_requested)
@@ -136,6 +143,11 @@ class MainWindow:
 
     def show(self) -> None:
         self._widget.show()
+
+    def set_virtual_microphone_status(self, state: AudioRoutingStatus) -> None:
+        self._virtual_microphone_status.setText(
+            f"Виртуальный микрофон: {state.message}"
+        )
 
     def activate(self) -> None:
         if self._widget.isMinimized():
