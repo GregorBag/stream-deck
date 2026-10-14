@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QLabel, QMessageBox
+from PySide6.QtWidgets import QLabel, QMessageBox, QSlider
 from pytestqt.qtbot import QtBot
 
 import dj_poltorashka.application.bootstrap as bootstrap
@@ -55,15 +55,19 @@ class RecordingAudioCoordinator:
 
 
 class RecordingSoundPlayerFactory:
+    instances: list["RecordingSoundPlayerFactory"] = []
+
     def __init__(self, *args, **kwargs) -> None:
         self.arguments = args
         self.keyword_arguments = kwargs
+        self.output_update_count = 0
+        self.instances.append(self)
 
     def update_mix_gains(self) -> None:
         pass
 
     def update_output_devices(self) -> None:
-        pass
+        self.output_update_count += 1
 
 
 class RecordingSoundPlayback:
@@ -286,6 +290,35 @@ def test_build_starts_and_closes_routing_layer_once(
     running.close()
     assert routing.close_count == 1
     assert registry.close_count == 1
+
+
+def test_routing_setting_change_refreshes_active_playback_outputs(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    RecordingSoundPlayerFactory.instances.clear()
+    RecordingRoutingService.instances.clear()
+    RecordingAudioCoordinator.instances.clear()
+    monkeypatch.setattr(bootstrap, "WindowsAudioBackend", RecordingAudioBackend)
+    monkeypatch.setattr(bootstrap, "AudioService", RecordingAudioService)
+    monkeypatch.setattr(bootstrap, "AudioCoordinator", RecordingAudioCoordinator)
+    monkeypatch.setattr(bootstrap, "QtSoundPlayerFactory", RecordingSoundPlayerFactory)
+    monkeypatch.setattr(bootstrap, "QtAudioDeviceRegistry", RecordingDeviceRegistry)
+    monkeypatch.setattr(bootstrap, "AudioRoutingService", RecordingRoutingService)
+    running = bootstrap.build_application(tmp_path)
+    try:
+        sound_slider = running.settings_dialog.widget.findChild(
+            QSlider,
+            "sound_gain_slider",
+        )
+
+        sound_slider.setValue(25)
+
+        assert RecordingSoundPlayerFactory.instances[-1].output_update_count == 1
+    finally:
+        running.settings_dialog.widget.close()
+        running.close()
 
 
 def test_corrupt_configuration_is_preserved_and_default_is_loaded(
