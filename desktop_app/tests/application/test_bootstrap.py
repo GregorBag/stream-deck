@@ -62,6 +62,9 @@ class RecordingSoundPlayerFactory:
     def update_mix_gains(self) -> None:
         pass
 
+    def update_output_devices(self) -> None:
+        pass
+
 
 class RecordingSoundPlayback:
     instances: list["RecordingSoundPlayback"] = []

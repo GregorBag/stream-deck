@@ -235,6 +235,7 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
     )
     def apply_routing_settings(settings: AudioRoutingSettings) -> None:
         audio_routing_service.apply(settings)
+        sound_player_factory.update_output_devices()
         sound_player_factory.update_mix_gains()
 
     settings_controller = SettingsController(

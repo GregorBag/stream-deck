@@ -177,6 +177,30 @@ def test_active_virtual_players_apply_changed_sound_gain(tmp_path: Path) -> None
     assert virtual_output.volumes[-1] == 0.1
 
 
+def test_active_player_applies_changed_monitor_device(tmp_path: Path) -> None:
+    monitor = ["headphones"]
+    FakeAudioOutput.instances.clear()
+    FakeMediaPlayer.instances.clear()
+    factory = QtSoundPlayerFactory(
+        FakeMediaDevices(),
+        media_player_type=FakeMediaPlayer,
+        audio_output_type=FakeAudioOutput,
+        monitor_device_provider=lambda: monitor[0],
+        cable_device_provider=lambda: "cable",
+    )
+    factory.create(
+        tmp_path / "sound.wav", lambda: None, lambda message: None
+    ).start()
+    monitor_output = next(
+        output for output in FakeAudioOutput.instances if output.device == "headphones"
+    )
+
+    monitor[0] = "speakers"
+    factory.update_output_devices()
+
+    assert monitor_output.device == "speakers"
+
+
 def test_successful_virtual_start_reports_routing_recovery(tmp_path: Path) -> None:
     recoveries: list[str] = []
     FakeAudioOutput.instances.clear()

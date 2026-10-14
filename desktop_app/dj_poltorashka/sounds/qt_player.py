@@ -35,7 +35,7 @@ class QtSoundPlayerFactory:
         self._on_routing_active = on_routing_active or (lambda: None)
         self._players: set[_PairedQtSoundPlayer] = set()
         self._virtual_players: set[_PairedQtSoundPlayer] = set()
-        self._media_devices.audioOutputsChanged.connect(self._update_outputs)
+        self._media_devices.audioOutputsChanged.connect(self.update_output_devices)
 
     def create(
         self,
@@ -62,7 +62,7 @@ class QtSoundPlayerFactory:
     def update_mix_gains(self) -> None:
         self._update_virtual_volumes()
 
-    def _update_outputs(self) -> None:
+    def update_output_devices(self) -> None:
         monitor = self._monitor_device_provider()
         cable = self._cable_device_provider()
         for player in tuple(self._players):

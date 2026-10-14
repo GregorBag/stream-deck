@@ -25,6 +25,9 @@ class FakeSoundPlayerFactory:
     def update_mix_gains(self) -> None:
         pass
 
+    def update_output_devices(self) -> None:
+        pass
+
 
 class FakeDeviceRegistry:
     def inputs(self) -> tuple[object, ...]:
