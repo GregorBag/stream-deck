@@ -63,9 +63,20 @@ class AudioService:
         self._members: dict[AudioTarget, dict[str, AudioMemberState]] = {}
         self._pending_apply: set[AudioTarget] = set()
         self._pending_adopt: set[AudioTarget] = set()
+        self._pending_passive_adopt: set[AudioTarget] = set()
 
     def apply_configuration(self, panel: PanelConfiguration) -> None:
         self._set_configuration(panel)
+
+    def adopt_configuration(self, panel: PanelConfiguration) -> None:
+        self._set_configuration(panel)
+        for channel in panel.channels:
+            target = AudioTarget.for_channel(channel)
+            if target is None:
+                continue
+            self._pending_apply.discard(target)
+            self._pending_adopt.discard(target)
+            self._pending_passive_adopt.add(target)
 
     def adopt_channel(
         self,
@@ -82,6 +93,7 @@ class AudioService:
         if target is None:
             raise ValueError("Неназначенный канал нельзя подхватить")
         self._pending_apply.discard(target)
+        self._pending_passive_adopt.discard(target)
         self._pending_adopt.add(target)
 
     def poll(self) -> tuple[ChannelAudioUpdate, ...]:
@@ -141,6 +153,7 @@ class AudioService:
             self._members.pop(target, None)
             self._pending_apply.discard(target)
             self._pending_adopt.discard(target)
+            self._pending_passive_adopt.discard(target)
         self._panel = panel
 
     def _reconcile_target(
@@ -154,8 +167,13 @@ class AudioService:
             return self._unavailable_update(channel_index, channel, target)
         if not snapshot.members:
             self._members[target] = {}
-            if target in self._pending_adopt:
+            pending_adopt = (
+                target in self._pending_adopt
+                or target in self._pending_passive_adopt
+            )
+            if pending_adopt and target.target_kind == "application":
                 self._pending_adopt.discard(target)
+                self._pending_passive_adopt.discard(target)
                 self._pending_apply.add(target)
             availability = (
                 "waiting" if target.target_kind == "application" else "unavailable"
@@ -173,6 +191,24 @@ class AudioService:
         members = {member.member_id: member for member in snapshot.members}
         previous = self._members.get(target, {})
         display_name = self._display_name(members)
+
+        if target in self._pending_passive_adopt:
+            selected = members[sorted(members)[-1]]
+            desired = (selected.volume, selected.muted)
+            self._desired[target] = desired
+            self._pending_passive_adopt.discard(target)
+            self._pending_adopt.discard(target)
+            self._pending_apply.discard(target)
+            self._members[target] = members
+            return ChannelAudioUpdate(
+                channel_index,
+                selected.volume,
+                selected.muted,
+                "active",
+                selected.display_name,
+                True,
+                target,
+            )
 
         if target in self._pending_adopt:
             selected = members[sorted(members)[-1]]

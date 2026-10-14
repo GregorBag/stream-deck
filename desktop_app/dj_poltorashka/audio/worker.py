@@ -31,6 +31,9 @@ class CoordinatorAudioService(Protocol):
     def apply_configuration(self, panel: PanelConfiguration) -> None:
         ...
 
+    def adopt_configuration(self, panel: PanelConfiguration) -> None:
+        ...
+
     def adopt_channel(
         self,
         panel: PanelConfiguration,
@@ -77,7 +80,7 @@ class _AudioWorker(QObject):
         self._timer = QTimer(self)
         self._timer.setInterval(self._poll_interval_ms)
         self._timer.timeout.connect(self._poll)
-        self._run_command(lambda: self._service.apply_configuration(panel))
+        self._run_command(lambda: self._service.adopt_configuration(panel))
         self._timer.start()
         self._poll()
 

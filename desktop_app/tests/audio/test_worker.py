@@ -28,12 +28,16 @@ def make_panel() -> PanelConfiguration:
 class FakeAudioService:
     def __init__(self) -> None:
         self.apply_calls: list[tuple[PanelConfiguration, QThread]] = []
+        self.adopt_configuration_calls: list[PanelConfiguration] = []
         self.adopt_calls: list[tuple[PanelConfiguration, int, QThread]] = []
         self.poll_threads: list[QThread] = []
         self.poll_action: Callable[[], tuple[object, ...]] = lambda: ()
 
     def apply_configuration(self, panel: PanelConfiguration) -> None:
         self.apply_calls.append((panel, QThread.currentThread()))
+
+    def adopt_configuration(self, panel: PanelConfiguration) -> None:
+        self.adopt_configuration_calls.append(panel)
 
     def adopt_channel(
         self,
@@ -47,18 +51,35 @@ class FakeAudioService:
         return self.poll_action()
 
 
+def make_test_coordinator(service, on_updates, on_error) -> AudioCoordinator:
+    return AudioCoordinator(
+        service,
+        on_updates,
+        on_error,
+        initialize_thread=lambda: None,
+        uninitialize_thread=lambda: None,
+    )
+
+
 def test_coordinator_runs_commands_and_poll_in_worker_thread(
     qtbot: QtBot,
 ) -> None:
     service = FakeAudioService()
     updates: list[tuple[object, ...]] = []
     errors: list[str] = []
-    coordinator = AudioCoordinator(service, updates.append, errors.append)
+    coordinator = make_test_coordinator(
+        service,
+        updates.append,
+        errors.append,
+    )
     panel = make_panel()
 
     try:
         coordinator.start(panel)
         qtbot.waitUntil(lambda: bool(service.poll_threads))
+        assert service.apply_calls == []
+        assert service.adopt_configuration_calls == [panel]
+
         coordinator.apply_configuration(panel)
         coordinator.adopt_channel(panel, 2)
         qtbot.waitUntil(
@@ -107,7 +128,11 @@ def test_coordinator_marks_updates_with_current_configuration_revision(
         ChannelAudioUpdate(0, 0.5, False, "active", "Динамики", False),
     )
     updates: list[tuple[ChannelAudioUpdate, ...]] = []
-    coordinator = AudioCoordinator(service, updates.append, lambda error: None)
+    coordinator = make_test_coordinator(
+        service,
+        updates.append,
+        lambda error: None,
+    )
     panel = make_panel()
 
     try:
@@ -146,7 +171,11 @@ def test_coordinator_reports_repeated_error_only_once_until_success(
         return ()
 
     service.poll_action = poll
-    coordinator = AudioCoordinator(service, lambda updates: None, errors.append)
+    coordinator = make_test_coordinator(
+        service,
+        lambda updates: None,
+        errors.append,
+    )
 
     try:
         coordinator.start(make_panel())
@@ -168,7 +197,11 @@ def test_close_waits_for_active_poll_and_stops_thread(qtbot: QtBot) -> None:
         return ()
 
     service.poll_action = blocking_poll
-    coordinator = AudioCoordinator(service, lambda updates: None, lambda error: None)
+    coordinator = make_test_coordinator(
+        service,
+        lambda updates: None,
+        lambda error: None,
+    )
     coordinator.start(make_panel())
     qtbot.waitUntil(poll_started.is_set)
 

@@ -189,6 +189,101 @@ def test_adopt_channel_uses_actual_state_without_overwriting_it() -> None:
     )
 
 
+def test_adopt_configuration_uses_actual_state_for_all_targets() -> None:
+    master = AudioTarget("master")
+    microphone = AudioTarget("microphone")
+    backend = FakeAudioBackend()
+    backend.snapshots[master] = AudioTargetSnapshot(
+        (make_member("speakers", 0.26),)
+    )
+    backend.snapshots[microphone] = AudioTargetSnapshot(
+        (make_member("microphone", 0.41, True, "Микрофон"),)
+    )
+    service = AudioService(backend)
+    panel = make_panel(
+        MixerChannelConfig("master", 1.0, False),
+        MixerChannelConfig("microphone", 1.0, False),
+    )
+
+    service.adopt_configuration(panel)
+    updates = service.poll()
+
+    assert backend.writes == []
+    assert updates == (
+        ChannelAudioUpdate(
+            0,
+            0.26,
+            False,
+            "active",
+            "Устройство",
+            True,
+        ),
+        ChannelAudioUpdate(
+            1,
+            0.41,
+            True,
+            "active",
+            "Микрофон",
+            True,
+        ),
+    )
+
+
+def test_adopt_configuration_does_not_normalize_program_sessions() -> None:
+    target = AudioTarget("application", r"C:\Apps\Player.exe")
+    backend = FakeAudioBackend()
+    backend.snapshots[target] = AudioTargetSnapshot(
+        (
+            make_member("session-a", 0.2, False, "Player"),
+            make_member("session-b", 0.7, False, "Player"),
+        )
+    )
+    service = AudioService(backend)
+    panel = make_panel(
+        MixerChannelConfig(
+            "application",
+            1.0,
+            False,
+            application_path=r"C:\Apps\Player.exe",
+        )
+    )
+
+    service.adopt_configuration(panel)
+    updates = service.poll()
+
+    assert backend.writes == []
+    assert tuple(
+        member.volume for member in backend.snapshots[target].members
+    ) == (0.2, 0.7)
+    assert updates[0].volume == 0.7
+    assert updates[0].externally_changed
+
+
+def test_adopt_unavailable_master_waits_for_actual_state() -> None:
+    target = AudioTarget("master")
+    backend = FakeAudioBackend()
+    service = AudioService(backend)
+    panel = make_panel(MixerChannelConfig("master", 1.0, False))
+
+    service.adopt_configuration(panel)
+    unavailable = service.poll()
+    backend.snapshots[target] = AudioTargetSnapshot(
+        (make_member("speakers", 0.26, True),)
+    )
+    active = service.poll()
+
+    assert unavailable[0].availability == "unavailable"
+    assert backend.writes == []
+    assert active[0] == ChannelAudioUpdate(
+        0,
+        0.26,
+        True,
+        "active",
+        "Устройство",
+        True,
+    )
+
+
 def test_program_waits_then_applies_state_when_session_appears() -> None:
     target = AudioTarget("application", r"C:\Apps\Player.exe")
     backend = FakeAudioBackend()
