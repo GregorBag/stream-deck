@@ -1,5 +1,5 @@
 from PySide6.QtCore import QThread
-from PySide6.QtMultimedia import QAudioFormat
+from PySide6.QtMultimedia import QAudio, QAudioFormat
 from pytestqt.qtbot import QtBot
 
 from dj_poltorashka.audio.routing_models import AudioRoutingStatus
@@ -128,6 +128,18 @@ def test_relay_pump_writes_only_complete_pcm_frames() -> None:
     AudioRelayPump(source, sink, period_bytes=9, bytes_per_frame=4).forward()
 
     assert sink.writes == [b"4567"]
+
+
+def test_relay_pump_preserves_pcm_frame_split_between_reads() -> None:
+    source = FakeReadable(b"abc")
+    sink = FakeWritable(16)
+    pump = AudioRelayPump(source, sink, period_bytes=16, bytes_per_frame=4)
+
+    pump.forward()
+    source.data += b"defgh"
+    pump.forward()
+
+    assert sink.writes == [b"abcdefgh"]
 
 
 class FakeRuntime:
@@ -287,6 +299,25 @@ class FakeSink:
         pass
 
 
+class FakeOpenErrorSource(FakeSource):
+    def __init__(self, device: object, audio_format: QAudioFormat) -> None:
+        super().__init__(device, audio_format)
+        self.stateChanged = FakeSignal()
+        self.callbacks_at_start = 0
+
+    def start(self) -> FakeReadable:
+        self.callbacks_at_start = len(self.stateChanged.callbacks)
+        readable = super().start()
+        self.stateChanged.emit(QAudio.State.StoppedState)
+        return readable
+
+    def error(self) -> QAudio.Error:
+        return QAudio.Error.OpenError
+
+    def state(self) -> QAudio.State:
+        return QAudio.State.StoppedState
+
+
 def test_active_qt_runtime_closes_worker_thread(qtbot: QtBot) -> None:
     sources: list[FakeSource] = []
     sinks: list[FakeSink] = []
@@ -335,5 +366,36 @@ def test_qt_runtime_delivers_errors_on_owner_thread(qtbot: QtBot) -> None:
         qtbot.waitUntil(lambda: bool(callback_threads))
 
         assert callback_threads == [QThread.currentThread()]
+    finally:
+        runtime.close()
+
+
+def test_qt_runtime_does_not_report_active_after_synchronous_open_error(
+    qtbot: QtBot,
+) -> None:
+    events: list[tuple[int, str | None]] = []
+    sources: list[FakeOpenErrorSource] = []
+
+    def source_factory(
+        device: object,
+        audio_format: QAudioFormat,
+    ) -> FakeOpenErrorSource:
+        source = FakeOpenErrorSource(device, audio_format)
+        sources.append(source)
+        return source
+
+    runtime = QtRelayRuntime(
+        lambda generation, message: events.append((generation, message)),
+        source_factory,
+        FakeSink,
+    )
+    try:
+        runtime.apply(object(), object(), make_format(48000), 0.35, 1)
+        qtbot.waitUntil(lambda: bool(events))
+
+        assert sources[0].callbacks_at_start == 1
+        assert len(events) == 1
+        assert events[0][0] == 1
+        assert events[0][1] is not None
     finally:
         runtime.close()
