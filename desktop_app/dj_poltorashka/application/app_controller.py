@@ -74,14 +74,13 @@ class AppController:
             self._main_window.show()
 
     def show_main_window(self) -> None:
-        self._main_window.show()
-        self._main_window.activate()
+        self._main_window.show_page("configuration")
 
     def show_simulator(self) -> None:
-        self._simulator.show()
+        self._main_window.show_page("simulator")
 
     def show_settings(self) -> None:
-        self._settings_dialog.open()
+        self._main_window.show_page("settings")
 
     def set_volume(self, channel_index: int, volume: float) -> None:
         panel = self._editor.set_volume(

@@ -3,11 +3,12 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QPushButton, QSlider
+from PySide6.QtWidgets import QComboBox, QPushButton, QSlider, QTabWidget
 from pytestqt.qtbot import QtBot
 
 import dj_poltorashka.application.bootstrap as bootstrap
 from dj_poltorashka.audio.models import AudioTargetSnapshot
+from dj_poltorashka.audio.routing_models import AudioDeviceDescriptor
 
 
 class FakeAudioBackend:
@@ -68,6 +69,75 @@ class FakeRoutingService:
 
     def close(self) -> None:
         self.close_count += 1
+
+
+def test_tabs_and_tray_navigate_within_main_window(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bootstrap, "WindowsAudioBackend", FakeAudioBackend)
+    monkeypatch.setattr(bootstrap, "QtSoundPlayerFactory", FakeSoundPlayerFactory)
+    monkeypatch.setattr(bootstrap, "QtAudioDeviceRegistry", FakeDeviceRegistry)
+    monkeypatch.setattr(bootstrap, "AudioRoutingService", FakeRoutingService)
+    monkeypatch.setattr(bootstrap.WindowsAutostart, "is_enabled", lambda self: False)
+    running = bootstrap.build_application(tmp_path)
+    qtbot.addWidget(running.main_window.widget)
+    try:
+        running.controller.start(background=False, draft_available=False)
+        tabs = running.main_window.widget.findChild(QTabWidget)
+        assert tabs is not None
+        assert [tabs.tabText(index) for index in range(tabs.count())] == [
+            "Конфигурация", "Симулятор панели", "Настройки",
+        ]
+        assert tabs.tabPosition() == QTabWidget.North
+        assert tabs.currentIndex() == 0
+        assert not running.simulator.widget.isWindow()
+        assert not running.settings_dialog.widget.isWindow()
+
+        qtbot.mouseClick(
+            tabs.tabBar(), Qt.LeftButton, pos=tabs.tabBar().tabRect(1).center(),
+        )
+        assert running.simulator.widget.isVisible()
+        slider = running.simulator.widget.findChild(QSlider, "simulator_slider_0")
+        slider.setValue(42)
+
+        qtbot.mouseClick(
+            tabs.tabBar(), Qt.LeftButton, pos=tabs.tabBar().tabRect(2).center(),
+        )
+        assert running.settings_dialog.widget.isVisible()
+        combo = running.settings_dialog.widget.findChild(
+            QComboBox, "input_device_combo",
+        )
+        assert combo.itemText(0) == "Системное устройство"
+
+        for action, expected_index in zip(
+            running.tray.menu.actions()[:3], (0, 1, 2), strict=True,
+        ):
+            running.main_window.widget.showMinimized()
+            running.main_window.hide()
+            action.trigger()
+            assert running.main_window.is_visible()
+            assert not running.main_window.widget.isMinimized()
+            assert tabs.currentIndex() == expected_index
+
+        running.main_window.hide()
+        monkeypatch.setattr(
+            FakeDeviceRegistry, "inputs",
+            lambda self: (AudioDeviceDescriptor("new-mic", "Новый микрофон"),),
+        )
+        running.tray.menu.actions()[2].trigger()
+        assert running.settings_dialog.widget.isVisible()
+        assert combo.findData("new-mic") >= 0
+
+        running.controller.show_main_window()
+        active = running.configuration_service.stored_configuration.active
+        assert active.channels[0].volume == 0.42
+        assert not running.simulator.widget.isVisible()
+        assert not running.settings_dialog.widget.isVisible()
+        assert tabs.currentIndex() == 0
+    finally:
+        running.close()
 
 
 def test_desktop_configuration_round_trip(

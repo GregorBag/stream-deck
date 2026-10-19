@@ -252,6 +252,11 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         dialogs.show_error,
         main_window.widget,
     )
+    main_window.add_panel_pages(
+        simulator.widget,
+        settings_dialog.widget,
+        settings_dialog.refresh,
+    )
     tray = TrayController(
         TrayCallbacks(
             open_main=lambda: controller().show_main_window(),

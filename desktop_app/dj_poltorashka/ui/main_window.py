@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -48,8 +50,14 @@ class MainWindow:
         self._widget.setObjectName("main_window")
         self._widget.setWindowTitle("DJ Poltorashka")
         central_widget = QWidget()
+        central_widget.setObjectName("configuration_page")
         root_layout = QHBoxLayout(central_widget)
-        self._widget.setCentralWidget(central_widget)
+        self._tabs = QTabWidget()
+        self._refresh_settings: Callable[[], None] | None = None
+        self._tabs.setObjectName("main_tabs")
+        self._tabs.setTabPosition(QTabWidget.TabPosition.North)
+        self._tabs.addTab(central_widget, "Конфигурация")
+        self._widget.setCentralWidget(self._tabs)
 
         active_group = QGroupBox("Активная настройка")
         active_group.setObjectName("active_configuration")
@@ -115,6 +123,32 @@ class MainWindow:
     @property
     def widget(self) -> QMainWindow:
         return self._widget
+
+    def add_panel_pages(
+        self,
+        simulator: QWidget,
+        settings: QWidget,
+        refresh_settings: Callable[[], None],
+    ) -> None:
+        self._tabs.addTab(simulator, "Симулятор панели")
+        self._tabs.addTab(settings, "Настройки")
+        self._refresh_settings = refresh_settings
+        self._tabs.currentChanged.connect(self._refresh_page)
+
+    def show_page(
+        self,
+        page: Literal["configuration", "simulator", "settings"],
+    ) -> None:
+        index = ("configuration", "simulator", "settings").index(page)
+        self.activate()
+        if self._tabs.currentIndex() == index:
+            self._refresh_page(index)
+        else:
+            self._tabs.setCurrentIndex(index)
+
+    def _refresh_page(self, index: int) -> None:
+        if index == 2 and self._refresh_settings is not None:
+            self._refresh_settings()
 
     def render(
         self,

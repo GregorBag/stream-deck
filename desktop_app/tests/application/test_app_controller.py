@@ -64,6 +64,7 @@ class RecordingMainWindow:
         self.show_count = 0
         self.hide_count = 0
         self.activate_count = 0
+        self.selected_pages: list[str] = []
 
     def render(
         self,
@@ -81,6 +82,11 @@ class RecordingMainWindow:
 
     def activate(self) -> None:
         self.activate_count += 1
+
+    def show_page(self, page: str) -> None:
+        self.selected_pages.append(page)
+        self.show()
+        self.activate()
 
 
 class RecordingSimulator:
@@ -724,10 +730,13 @@ def test_show_commands_open_requested_surfaces(tmp_path: Path) -> None:
     context.controller.handle_instance_command("show")
     context.controller.handle_instance_command("ping")
 
-    assert context.main_window.show_count == 2
-    assert context.main_window.activate_count == 2
-    assert context.simulator.show_count == 1
-    assert context.settings.open_count == 1
+    assert context.main_window.selected_pages == [
+        "configuration", "simulator", "settings", "configuration",
+    ]
+    assert context.main_window.show_count == 4
+    assert context.main_window.activate_count == 4
+    assert context.simulator.show_count == 0
+    assert context.settings.open_count == 0
 
     with pytest.raises(ValueError, match="Неизвестная команда экземпляра"):
         context.controller.handle_instance_command("invalid")

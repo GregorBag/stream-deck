@@ -7,7 +7,6 @@ from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
     QFormLayout,
     QGroupBox,
     QLabel,
@@ -33,7 +32,7 @@ class SettingsDialog:
     ) -> None:
         self._controller = controller
         self._show_error = show_error
-        self._widget = QDialog(parent)
+        self._widget = QWidget(parent)
         self._widget.setWindowTitle("Настройки")
         layout = QVBoxLayout(self._widget)
         self._autostart_checkbox = QCheckBox("Запускать вместе с Windows")
@@ -65,10 +64,14 @@ class SettingsDialog:
         self._sound_slider.valueChanged.connect(self._set_sound_gain)
 
     @property
-    def widget(self) -> QDialog:
+    def widget(self) -> QWidget:
         return self._widget
 
     def open(self) -> None:
+        self.refresh()
+        self._widget.show()
+
+    def refresh(self) -> None:
         try:
             actual_state = self._controller.autostart_enabled()
         except OSError as error:
@@ -77,7 +80,6 @@ class SettingsDialog:
         self._show_autostart_state(actual_state)
         if hasattr(self._controller, "routing_settings"):
             self._refresh_routing_controls()
-        self._widget.open()
 
     def set_virtual_microphone_status(self, state: AudioRoutingStatus) -> None:
         self._status_label.setText(state.message)

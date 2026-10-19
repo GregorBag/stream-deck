@@ -1,11 +1,10 @@
-"""Отдельное окно симулятора физических органов управления."""
+"""Симулятор физических органов управления."""
 
 from collections.abc import Callable
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -32,7 +31,7 @@ class PanelSimulator:
         self._on_event = on_event
         self._panel: PanelConfiguration | None = None
         self._is_paused = False
-        self._widget = QDialog()
+        self._widget = QWidget()
         self._widget.setObjectName("panel_simulator")
         self._widget.setWindowTitle("Симулятор панели")
         root_layout = QVBoxLayout(self._widget)
@@ -108,7 +107,7 @@ class PanelSimulator:
         self._update_enabled_state()
 
     @property
-    def widget(self) -> QDialog:
+    def widget(self) -> QWidget:
         return self._widget
 
     def render(self, panel: PanelConfiguration) -> None:
