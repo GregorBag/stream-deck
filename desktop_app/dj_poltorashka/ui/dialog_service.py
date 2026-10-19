@@ -1,14 +1,16 @@
 """Модальные пользовательские запросы настольного приложения."""
 
 from pathlib import Path
+from collections.abc import Callable
 from typing import Literal
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
-from dj_poltorashka.configuration.models import StoredConfiguration
+from dj_poltorashka.configuration.models import PresetConfig, StoredConfiguration
 from dj_poltorashka.application.application_catalog import ApplicationCatalog
 from dj_poltorashka.ui.application_picker import ApplicationPicker
 from dj_poltorashka.ui.preset_dialog import PresetDialog
+from dj_poltorashka.ui.preset_edit_dialog import PresetEditDialog, PresetEditResult
 
 
 ExitChoice = Literal["save", "discard", "cancel"]
@@ -35,6 +37,19 @@ class DialogService:
         stored: StoredConfiguration,
     ) -> tuple[int, str] | None:
         return PresetDialog(self._parent).choose(stored)
+
+    def edit_preset(
+        self,
+        preset: PresetConfig,
+        on_save: Callable[[PresetEditResult], bool],
+    ) -> None:
+        editor = PresetEditDialog(
+            self.choose_application_file,
+            self.choose_sound_file,
+            self.show_error,
+            self._parent,
+        )
+        editor.edit(preset, on_save)
 
     def confirm_overwrite(self, name: str) -> bool:
         answer = QMessageBox.question(
