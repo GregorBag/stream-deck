@@ -54,7 +54,7 @@ class ChannelCard:
         self._status_label.setObjectName(f"channel_status_{channel_index}")
         layout.addWidget(self._status_label)
 
-        self._application_button = QPushButton("Выбрать .exe")
+        self._application_button = QPushButton("Выбрать программу")
         self._application_button.setObjectName(
             f"application_button_{channel_index}"
         )

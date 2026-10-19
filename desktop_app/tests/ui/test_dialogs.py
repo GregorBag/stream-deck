@@ -18,6 +18,7 @@ from dj_poltorashka.configuration.defaults import (
 )
 from dj_poltorashka.configuration.models import PresetConfig, StoredConfiguration
 from dj_poltorashka.ui.dialog_service import DialogService
+from dj_poltorashka.ui.application_picker import ApplicationPicker
 from dj_poltorashka.ui.preset_dialog import PresetDialog
 from dj_poltorashka.ui.settings_dialog import SettingsDialog
 
@@ -45,13 +46,13 @@ def test_file_dialogs_use_expected_filters_and_return_paths(
     monkeypatch.setattr(QFileDialog, "getOpenFileName", get_open_file_name)
     dialogs = DialogService()
 
+    monkeypatch.setattr(ApplicationPicker, "choose", lambda self: Path(r"C:\Apps\Player.exe"))
     application_path = dialogs.choose_application_file()
     sound_path = dialogs.choose_sound_file()
 
     assert application_path == Path(r"C:\Apps\Player.exe")
     assert sound_path == Path(r"C:\Sounds\intro.mp3")
     assert calls == [
-        ("Выберите программу", "Программы (*.exe)"),
         ("Выберите звук", "Аудиофайлы (*.mp3 *.wav)"),
     ]
 

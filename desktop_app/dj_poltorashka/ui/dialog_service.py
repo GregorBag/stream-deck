@@ -6,6 +6,8 @@ from typing import Literal
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
 from dj_poltorashka.configuration.models import StoredConfiguration
+from dj_poltorashka.application.application_catalog import ApplicationCatalog
+from dj_poltorashka.ui.application_picker import ApplicationPicker
 from dj_poltorashka.ui.preset_dialog import PresetDialog
 
 
@@ -26,13 +28,7 @@ class DialogService:
         return Path(filename) if filename else None
 
     def choose_application_file(self) -> Path | None:
-        filename, _ = QFileDialog.getOpenFileName(
-            self._parent,
-            "Выберите программу",
-            "",
-            "Программы (*.exe)",
-        )
-        return Path(filename) if filename else None
+        return ApplicationPicker(ApplicationCatalog(), self._parent).choose()
 
     def choose_preset(
         self,
