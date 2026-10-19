@@ -24,6 +24,7 @@ from dj_poltorashka.panel.events import (
     SliderChanged,
     SoundPressed,
 )
+from dj_poltorashka.ui.theme import make_icon, set_accent
 
 
 class PanelSimulator:
@@ -35,25 +36,48 @@ class PanelSimulator:
         self._widget.setObjectName("panel_simulator")
         self._widget.setWindowTitle("Симулятор панели")
         root_layout = QVBoxLayout(self._widget)
+        root_layout.setContentsMargins(14, 8, 14, 14)
+        root_layout.setSpacing(12)
+        heading = QLabel("Симулятор панели")
+        heading.setProperty("role", "section_title")
+        root_layout.addWidget(heading)
 
         self._status_label = QLabel("Симулятор готов")
         self._status_label.setObjectName("simulator_status")
+        self._status_label.setProperty("role", "status")
         root_layout.addWidget(self._status_label)
 
         channels_container = QWidget()
         channels_layout = QHBoxLayout(channels_container)
+        channels_layout.setContentsMargins(0, 0, 0, 0)
+        channels_layout.setSpacing(12)
         self._sliders: list[QSlider] = []
         self._mute_buttons: list[QPushButton] = []
+        self._volume_values: list[QLabel] = []
         for index in range(4):
             group = QGroupBox(f"Канал {index + 1}")
+            group.setProperty("role", "channel")
+            set_accent(group, index)
             group_layout = QVBoxLayout(group)
             slider = QSlider(Qt.Vertical)
             slider.setRange(0, 100)
             slider.setObjectName(f"simulator_slider_{index}")
-            mute_button = QPushButton("Mute")
+            slider.setMinimumHeight(140)
+            slider.setFixedWidth(32)
+            slider.setAccessibleName(f"Громкость канала {index + 1}")
+            mute_button = QPushButton("Заглушить")
             mute_button.setCheckable(True)
             mute_button.setObjectName(f"simulator_mute_{index}")
+            mute_button.setIcon(make_icon("speaker", size=18))
             group_layout.addWidget(slider, alignment=Qt.AlignHCenter)
+            readout = QLabel("0%")
+            readout.setProperty("role", "readout")
+            readout.setAlignment(Qt.AlignCenter)
+            group_layout.addWidget(readout)
+            self._volume_values.append(readout)
+            slider.valueChanged.connect(
+                lambda value, label=readout: label.setText(f"{value}%")
+            )
             group_layout.addWidget(mute_button)
             channels_layout.addWidget(group)
             self._sliders.append(slider)
@@ -68,14 +92,19 @@ class PanelSimulator:
                     MutePressed(channel_index)
                 )
             )
-        root_layout.addWidget(channels_container)
+        root_layout.addWidget(channels_container, 1)
 
         sounds_container = QWidget()
         sounds_layout = QGridLayout(sounds_container)
+        sounds_layout.setContentsMargins(0, 0, 0, 0)
+        sounds_layout.setSpacing(10)
         self._sound_buttons: list[QPushButton] = []
         for index in range(8):
             button = QPushButton(f"Кнопка {index + 1}")
             button.setObjectName(f"simulator_sound_{index}")
+            button.setProperty("role", "pad")
+            set_accent(button, index)
+            button.setIcon(make_icon("paw", "#f2d5ff", 22))
             button.clicked.connect(
                 lambda checked=False, button_index=index: self._sound_pressed(
                     button_index
@@ -87,10 +116,12 @@ class PanelSimulator:
 
         presets_container = QWidget()
         presets_layout = QHBoxLayout(presets_container)
+        presets_layout.setContentsMargins(0, 0, 0, 0)
         self._preset_buttons: list[QPushButton] = []
         for index in range(3):
             button = QPushButton(f"Пресет {index + 1}")
             button.setObjectName(f"simulator_preset_{index}")
+            button.setIcon(make_icon("play", size=18))
             button.clicked.connect(
                 lambda checked=False, preset_index=index: self._on_event(
                     PresetPressed(preset_index)
@@ -118,7 +149,9 @@ class PanelSimulator:
         ]
         for index, channel in enumerate(panel.channels):
             self._sliders[index].setValue(round(channel.volume * 100))
+            self._volume_values[index].setText(f"{self._sliders[index].value()}%")
             self._mute_buttons[index].setChecked(channel.muted)
+            self._mute_buttons[index].setText("Включить звук" if channel.muted else "Заглушить")
         for index, sound in enumerate(panel.sound_buttons):
             self._sound_buttons[index].setText(
                 sound.display_name or f"Кнопка {index + 1}"

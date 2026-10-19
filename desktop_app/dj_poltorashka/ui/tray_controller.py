@@ -2,15 +2,16 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from PySide6.QtGui import QIcon
 
 from PySide6.QtWidgets import (
     QApplication,
     QMenu,
-    QStyle,
     QSystemTrayIcon,
 )
 
 from dj_poltorashka.audio.routing_models import AudioRoutingStatus
+from dj_poltorashka.ui.theme import asset_path
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,7 @@ class TrayController:
         if application is None:
             raise RuntimeError("Перед созданием трея требуется QApplication")
 
-        icon = application.style().standardIcon(QStyle.SP_MediaVolume)
+        icon = QIcon(str(asset_path("avatar.png")))
         self._icon = QSystemTrayIcon(icon)
         self._icon.setToolTip("DJ Poltorashka")
         self._menu = QMenu()

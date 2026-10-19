@@ -85,6 +85,7 @@ class PresetEditDialog:
         actions = QHBoxLayout()
         save = QPushButton("Сохранить")
         save.setObjectName("preset_edit_save")
+        save.setProperty("role", "primary")
         save.clicked.connect(self._save)
         actions.addWidget(save)
         cancel = QPushButton("Отмена")

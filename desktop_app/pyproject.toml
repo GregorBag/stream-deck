@@ -16,6 +16,9 @@ build = ["pyinstaller>=6,<7"]
 where = ["."]
 include = ["dj_poltorashka*"]
 
+[tool.setuptools.package-data]
+"dj_poltorashka.ui" = ["assets/*.qss", "assets/*.png", "assets/*.svg"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

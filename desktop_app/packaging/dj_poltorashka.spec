@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 from PySide6.QtCore import QLibraryInfo
 
 from dj_poltorashka.build_rules import filter_windows_binaries
@@ -11,7 +11,7 @@ from dj_poltorashka.build_rules import filter_windows_binaries
 project_root = Path(SPECPATH).parent
 entry_point = project_root / "dj_poltorashka" / "__main__.py"
 
-datas = []
+datas = collect_data_files("dj_poltorashka.ui", includes=["assets/*"])
 binaries = []
 hidden_imports = collect_submodules("pycaw")
 hidden_imports.extend(

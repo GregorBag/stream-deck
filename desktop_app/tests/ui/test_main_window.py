@@ -321,3 +321,33 @@ def test_main_window_displays_virtual_microphone_status(qtbot: QtBot) -> None:
 
     label = main_window.widget.findChild(QLabel, "virtual_microphone_status")
     assert label.text() == "Виртуальный микрофон: VB-CABLE не найден"
+
+
+def test_fader_readout_tracks_user_input_and_silent_render(qtbot: QtBot) -> None:
+    recorder = CallbackRecorder()
+    main_window = MainWindow(recorder.callbacks())
+    qtbot.addWidget(main_window.widget)
+    main_window.render(make_stored_configuration())
+    slider = main_window.widget.findChild(QSlider, "volume_slider_1")
+    readout = main_window.widget.findChild(QLabel, "volume_value_1")
+
+    assert readout is not None
+    assert slider.orientation() == Qt.Vertical
+    assert readout.text() == "65%"
+    assert recorder.calls == []
+
+    slider.setValue(32)
+
+    assert readout.text() == "32%"
+    assert recorder.calls == [("volume", 1, 0.32)]
+    main_window.render(make_stored_configuration())
+    assert readout.text() == "65%"
+
+
+def test_header_does_not_claim_a_physical_panel_is_connected(qtbot: QtBot) -> None:
+    main_window = MainWindow(make_callbacks())
+    qtbot.addWidget(main_window.widget)
+    badge = main_window.widget.findChild(QLabel, "panel_connection_status")
+
+    assert badge is not None
+    assert "не подключена" in badge.text().lower()

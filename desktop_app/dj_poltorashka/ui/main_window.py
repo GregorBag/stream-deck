@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -22,8 +23,10 @@ from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.audio.routing_models import AudioRoutingStatus
 from dj_poltorashka.configuration.models import ChannelKind, StoredConfiguration
 from dj_poltorashka.ui.channel_card import ChannelCard
+from dj_poltorashka.ui.brand_header import create_brand_header
 from dj_poltorashka.ui.preset_card import PresetCard
 from dj_poltorashka.ui.sound_button import SoundButton
+from dj_poltorashka.ui.theme import apply_theme, make_icon
 
 
 @dataclass(frozen=True)
@@ -45,36 +48,59 @@ class MainWindow:
         if application is None:
             raise RuntimeError("Перед созданием окна требуется QApplication")
         application.setQuitOnLastWindowClosed(False)
+        apply_theme(application)
 
         self._widget = QMainWindow()
         self._widget.setObjectName("main_window")
         self._widget.setWindowTitle("DJ Poltorashka")
+        self._widget.resize(1280, 900)
+        self._widget.setMinimumSize(880, 620)
+        shell = QWidget()
+        shell.setObjectName("main_shell")
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(14, 14, 14, 0)
+        shell_layout.setSpacing(12)
+        shell_layout.addWidget(create_brand_header())
         central_widget = QWidget()
         central_widget.setObjectName("configuration_page")
         root_layout = QHBoxLayout(central_widget)
+        root_layout.setContentsMargins(0, 0, 0, 12)
+        root_layout.setSpacing(14)
         self._tabs = QTabWidget()
         self._refresh_settings: Callable[[], None] | None = None
         self._tabs.setObjectName("main_tabs")
         self._tabs.setTabPosition(QTabWidget.TabPosition.North)
-        self._tabs.addTab(central_widget, "Конфигурация")
-        self._widget.setCentralWidget(self._tabs)
+        self._tabs.setIconSize(QSize(22, 22))
+        self._tabs.addTab(self._scroll_page(central_widget), make_icon("sliders"), "Конфигурация")
+        shell_layout.addWidget(self._tabs, 1)
+        self._widget.setCentralWidget(shell)
+        self._widget.statusBar().showMessage("DJ POLTORASHKA  /  CAT CLUB")
 
         active_group = QGroupBox("Активная настройка")
         active_group.setObjectName("active_configuration")
         active_layout = QVBoxLayout(active_group)
+        active_layout.setSpacing(10)
         self._virtual_microphone_status = QLabel(
             "Виртуальный микрофон: состояние ещё не определено"
         )
         self._virtual_microphone_status.setObjectName("virtual_microphone_status")
-        active_layout.addWidget(self._virtual_microphone_status)
+        self._virtual_microphone_status.setProperty("role", "status")
+        self._virtual_microphone_status.setWordWrap(True)
+        active_toolbar = QHBoxLayout()
+        active_toolbar.addWidget(self._virtual_microphone_status, 1)
         save_button = QPushButton("Сохранить в пресет")
         save_button.setObjectName("save_preset_button")
+        save_button.setProperty("role", "primary")
+        save_button.setIcon(make_icon("save", "#fff0fc", 18))
         save_button.clicked.connect(callbacks.save_preset_requested)
-        active_layout.addWidget(save_button)
+        active_toolbar.addWidget(save_button, alignment=Qt.AlignTop)
+        active_layout.addLayout(active_toolbar)
 
         channels_container = QWidget()
         channels_container.setObjectName("channels_container")
         channels_layout = QHBoxLayout(channels_container)
+        channels_layout.setContentsMargins(0, 0, 0, 0)
+        channels_layout.setSpacing(10)
         self._channel_cards = tuple(
             ChannelCard(
                 channel_index=index,
@@ -87,11 +113,13 @@ class MainWindow:
         )
         for card in self._channel_cards:
             channels_layout.addWidget(card.widget)
-        active_layout.addWidget(channels_container)
+        active_layout.addWidget(channels_container, 1)
 
         sounds_container = QWidget()
         sounds_container.setObjectName("sounds_container")
         sounds_layout = QGridLayout(sounds_container)
+        sounds_layout.setContentsMargins(0, 0, 0, 0)
+        sounds_layout.setSpacing(10)
         self._sound_buttons = tuple(
             SoundButton(
                 button_index=index,
@@ -107,7 +135,11 @@ class MainWindow:
 
         presets_container = QWidget()
         presets_container.setObjectName("presets_container")
+        presets_container.setMinimumWidth(265)
+        presets_container.setMaximumWidth(310)
         presets_layout = QVBoxLayout(presets_container)
+        presets_layout.setContentsMargins(0, 0, 0, 0)
+        presets_layout.setSpacing(12)
         self._preset_cards = tuple(
             PresetCard(
                 index,
@@ -117,8 +149,16 @@ class MainWindow:
             for index in range(3)
         )
         for card in self._preset_cards:
-            presets_layout.addWidget(card.widget)
-        root_layout.addWidget(presets_container)
+            presets_layout.addWidget(card.widget, 1)
+        presets_panel = QWidget()
+        presets_panel.setObjectName("presets_panel")
+        sidebar = QVBoxLayout(presets_panel)
+        sidebar.setContentsMargins(12, 14, 12, 12)
+        heading = QLabel("Пресеты")
+        heading.setProperty("role", "section_title")
+        sidebar.addWidget(heading)
+        sidebar.addWidget(presets_container, 1)
+        root_layout.addWidget(presets_panel)
 
     @property
     def widget(self) -> QMainWindow:
@@ -130,10 +170,17 @@ class MainWindow:
         settings: QWidget,
         refresh_settings: Callable[[], None],
     ) -> None:
-        self._tabs.addTab(simulator, "Симулятор панели")
-        self._tabs.addTab(settings, "Настройки")
+        self._tabs.addTab(self._scroll_page(simulator), make_icon("panel"), "Симулятор панели")
+        self._tabs.addTab(self._scroll_page(settings), make_icon("settings"), "Настройки")
         self._refresh_settings = refresh_settings
         self._tabs.currentChanged.connect(self._refresh_page)
+
+    @staticmethod
+    def _scroll_page(page: QWidget) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(page)
+        return scroll
 
     def show_page(
         self,
@@ -187,6 +234,7 @@ class MainWindow:
         self._virtual_microphone_status.setText(
             f"Виртуальный микрофон: {state.message}"
         )
+        self._widget.statusBar().showMessage(f"Виртуальный микрофон: {state.message}")
 
     def activate(self) -> None:
         if self._widget.isMinimized():

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from dj_poltorashka.configuration.models import PresetConfig
+from dj_poltorashka.ui.theme import make_icon, set_accent
 
 
 class PresetCard:
@@ -24,30 +25,49 @@ class PresetCard:
         self._preset_index = preset_index
         self._widget = QGroupBox()
         self._widget.setObjectName(f"preset_card_{preset_index}")
+        self._widget.setProperty("role", "preset")
+        set_accent(self._widget, preset_index)
         layout = QVBoxLayout(self._widget)
+        layout.setSpacing(10)
 
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         title = QLabel(f"Пресет {preset_index + 1}")
         title.setObjectName(f"preset_title_{preset_index}")
+        title.setProperty("role", "muted")
         header_layout.addWidget(title)
+        header_layout.addStretch()
+        badge = QLabel()
+        badge.setPixmap(make_icon("paw", "#c783de", 26).pixmap(26, 26))
+        header_layout.addWidget(badge)
         self._load_button = QPushButton("Загрузить")
         self._load_button.setObjectName(f"preset_load_{preset_index}")
-        header_layout.addWidget(self._load_button)
+        self._load_button.setProperty("role", "primary")
+        self._load_button.setIcon(make_icon("play", "#fff0fc", 17))
         self._edit_button = QPushButton("Редактировать")
         self._edit_button.setObjectName(f"preset_edit_{preset_index}")
-        header_layout.addWidget(self._edit_button)
+        self._edit_button.setIcon(make_icon("edit", size=16))
+        self._edit_button.setToolTip("Редактировать пресет")
         layout.addWidget(header)
 
         self._name_label = QLabel("Пусто")
         self._name_label.setObjectName(f"preset_name_{preset_index}")
+        self._name_label.setProperty("role", "card_name")
+        self._name_label.setWordWrap(True)
         layout.addWidget(self._name_label)
 
         self._summary_label = QLabel("Нет сохранённой настройки")
         self._summary_label.setObjectName(f"preset_summary_{preset_index}")
         self._summary_label.setWordWrap(True)
+        self._summary_label.setProperty("role", "muted")
         layout.addWidget(self._summary_label)
+        layout.addStretch()
+        actions = QHBoxLayout()
+        actions.setSpacing(6)
+        actions.addWidget(self._load_button)
+        actions.addWidget(self._edit_button)
+        layout.addLayout(actions)
 
         self._load_button.clicked.connect(
             lambda: on_load_requested(self._preset_index)

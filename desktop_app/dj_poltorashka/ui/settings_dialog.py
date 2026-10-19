@@ -33,8 +33,14 @@ class SettingsDialog:
         self._controller = controller
         self._show_error = show_error
         self._widget = QWidget(parent)
+        self._widget.setObjectName("settings_page")
         self._widget.setWindowTitle("Настройки")
         layout = QVBoxLayout(self._widget)
+        layout.setContentsMargins(14, 8, 14, 14)
+        layout.setSpacing(16)
+        heading = QLabel("Настройки приложения")
+        heading.setProperty("role", "section_title")
+        layout.addWidget(heading)
         self._autostart_checkbox = QCheckBox("Запускать вместе с Windows")
         self._autostart_checkbox.setObjectName("autostart_checkbox")
         layout.addWidget(self._autostart_checkbox)
@@ -51,12 +57,24 @@ class SettingsDialog:
         self._sound_slider = self._make_slider("sound_gain_slider")
         self._status_label = QLabel("Состояние ещё не определено")
         self._status_label.setObjectName("virtual_microphone_status")
+        self._status_label.setWordWrap(True)
+        self._status_label.setProperty("role", "status")
+        routing_layout.setVerticalSpacing(18)
+        routing_layout.setContentsMargins(20, 24, 20, 20)
         routing_layout.addRow("Физический микрофон", self._input_combo)
         routing_layout.addRow("Мониторинг звуков", self._monitor_combo)
         routing_layout.addRow("Громкость микрофона", self._microphone_slider)
         routing_layout.addRow("Громкость звуков", self._sound_slider)
         routing_layout.addRow("Состояние", self._status_label)
         layout.addWidget(group)
+        note = QLabel(
+            "Для передачи голоса и звуков в голосовой чат выберите CABLE Output "
+            "в качестве микрофона в настройках этого чата."
+        )
+        note.setProperty("role", "muted")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch()
 
         self._input_combo.currentIndexChanged.connect(self._set_input_device)
         self._monitor_combo.currentIndexChanged.connect(self._set_monitor_device)
