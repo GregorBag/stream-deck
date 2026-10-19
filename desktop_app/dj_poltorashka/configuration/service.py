@@ -47,6 +47,11 @@ class ConfigurationService:
             raise RuntimeError("Сохранённый пресет отсутствует")
         return preset
 
+    def replace_preset(self, slot: int, preset: PresetConfig) -> None:
+        candidate = self._workspace.with_replaced_preset(slot, preset)
+        self._repository.save(candidate.stored_configuration)
+        self._workspace = candidate
+
     def load_preset(self, slot: int) -> PanelConfiguration:
         prepared = self._workspace.prepare_preset_load(slot)
         if prepared.draft_to_save is not None:

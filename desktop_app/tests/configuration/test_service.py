@@ -21,10 +21,13 @@ class InMemoryRepository:
         self.draft = draft
         self.fail_draft_save = False
         self.fail_draft_clear = False
+        self.fail_save = False
         self.operations: list[tuple[str, object | None]] = []
 
     def save(self, stored: StoredConfiguration) -> None:
         self.operations.append(("save", stored))
+        if self.fail_save:
+            raise OSError("configuration save failed")
         self.saved_configuration = stored
 
     def load_draft(self) -> PanelConfiguration | None:
@@ -124,6 +127,40 @@ def test_save_to_preset_persists_state_and_clears_draft() -> None:
         "save",
         "clear_draft",
     ]
+
+
+def test_replace_preset_persists_without_touching_draft() -> None:
+    baseline = make_panel(0.5)
+    active = make_panel(0.8)
+    original = PresetConfig("Работа", make_panel(0.2))
+    replacement = PresetConfig("Игры", make_panel(0.3))
+    stored = make_stored_configuration(active, baseline, original)
+    repository = InMemoryRepository(stored=stored, draft=active)
+    service = make_service(stored, repository)
+
+    service.replace_preset(1, replacement)
+
+    assert service.stored_configuration.presets[0] == replacement
+    assert service.stored_configuration.active == active
+    assert service.stored_configuration.baseline == baseline
+    assert service.is_dirty
+    assert repository.draft == active
+    assert [operation[0] for operation in repository.operations] == ["save"]
+
+
+def test_replace_preset_save_failure_keeps_workspace() -> None:
+    panel = make_panel(0.5)
+    original = PresetConfig("Работа", panel)
+    stored = make_stored_configuration(panel, panel, original)
+    repository = InMemoryRepository(stored=stored)
+    repository.fail_save = True
+    service = make_service(stored, repository)
+
+    with pytest.raises(OSError, match="configuration save failed"):
+        service.replace_preset(1, PresetConfig("Игры", make_panel(0.3)))
+
+    assert service.stored_configuration == stored
+    assert repository.saved_configuration == stored
 
 
 def test_load_dirty_preset_saves_draft_before_persisting_loaded_state() -> None:

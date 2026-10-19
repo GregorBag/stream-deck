@@ -154,3 +154,31 @@ def test_preparing_empty_preset_slot_is_rejected() -> None:
 
     with pytest.raises(LookupError):
         workspace.prepare_preset_load(2)
+
+
+def test_replacing_preset_preserves_active_baseline_and_other_slots() -> None:
+    baseline = make_panel(0.5)
+    active = make_panel(0.8)
+    old = PresetConfig("Работа", make_panel(0.2))
+    replacement = PresetConfig("Игры", make_panel(0.3))
+    workspace = ConfigurationWorkspace(make_stored_configuration(active, baseline, old))
+
+    changed = workspace.with_replaced_preset(1, replacement)
+
+    assert changed.stored_configuration.active == active
+    assert changed.stored_configuration.baseline == baseline
+    assert changed.stored_configuration.presets == (replacement, None, None)
+    assert changed.is_dirty
+    assert workspace.stored_configuration.presets[0] == old
+
+
+def test_replacing_empty_or_invalid_slot_fails() -> None:
+    panel = make_panel(0.5)
+    workspace = ConfigurationWorkspace(make_stored_configuration(first_preset=PresetConfig("Работа", panel)))
+    replacement = PresetConfig("Игры", panel)
+
+    with pytest.raises(LookupError):
+        workspace.with_replaced_preset(2, replacement)
+    for slot in (0, 4):
+        with pytest.raises(IndexError):
+            workspace.with_replaced_preset(slot, replacement)

@@ -55,6 +55,26 @@ class ConfigurationWorkspace:
         )
         return ConfigurationWorkspace(stored)
 
+    def with_replaced_preset(
+        self,
+        slot: int,
+        preset: PresetConfig,
+    ) -> "ConfigurationWorkspace":
+        preset_index = self._preset_index(slot)
+        if self._stored_configuration.presets[preset_index] is None:
+            raise LookupError("Выбранный слот пресета пуст")
+        if not isinstance(preset, PresetConfig):
+            raise ValueError("Требуется PresetConfig")
+        presets = list(self._stored_configuration.presets)
+        presets[preset_index] = preset
+        return ConfigurationWorkspace(
+            StoredConfiguration(
+                active=self._stored_configuration.active,
+                baseline=self._stored_configuration.baseline,
+                presets=tuple(presets),
+            )
+        )
+
     def prepare_preset_load(self, slot: int) -> PresetLoad:
         preset_index = self._preset_index(slot)
         preset = self._stored_configuration.presets[preset_index]
