@@ -17,6 +17,26 @@ class ResolvedRoutingSnapshot:
     cable_device: object | None
 
 
+def _device_key(device: object | None) -> object | None:
+    if device is None:
+        return None
+    id_reader = getattr(device, "id", None)
+    return bytes(id_reader()) if callable(id_reader) else device
+
+
+def _relay_key(snapshot: ResolvedRoutingSnapshot) -> tuple[object | None, object | None, float]:
+    voice_level = calculate_bus_levels(
+        snapshot.settings.microphone_gain,
+        snapshot.settings.sound_gain,
+        0,
+    ).microphone
+    return (
+        _device_key(snapshot.input_device),
+        _device_key(snapshot.cable_device),
+        voice_level,
+    )
+
+
 class AudioRoutingService:
     """Применяет один согласованный снимок устройств за обновление."""
 
@@ -69,6 +89,7 @@ class AudioRoutingService:
     def refresh_devices(self) -> None:
         if self._closed or not self._started:
             return
+        previous_snapshot = self._snapshot
         snapshot = ResolvedRoutingSnapshot(
             self._settings,
             self._registry.resolve_input(self._settings.input_device_id),
@@ -76,11 +97,10 @@ class AudioRoutingService:
             self._registry.resolve_cable_input(),
         )
         self._snapshot = snapshot
-        voice_level = calculate_bus_levels(
-            self._settings.microphone_gain,
-            self._settings.sound_gain,
-            0,
-        ).microphone
+        if self._relay_started and _relay_key(snapshot) == _relay_key(previous_snapshot):
+            self._publish_combined_status()
+            return
+        voice_level = _relay_key(snapshot)[2]
         self._refreshing = True
         self._pending_relay_status = None
         self._relay_status = None

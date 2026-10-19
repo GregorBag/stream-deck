@@ -1,10 +1,9 @@
 from PySide6.QtCore import QThread
-from PySide6.QtMultimedia import QAudio, QAudioFormat
+from PySide6.QtMultimedia import QAudioFormat, QtAudio
 from pytestqt.qtbot import QtBot
 
 from dj_poltorashka.audio.routing_models import AudioRoutingStatus
 from dj_poltorashka.audio.virtual_microphone import (
-    AudioRelayPump,
     QtRelayRuntime,
     VirtualMicrophoneCoordinator,
     select_relay_format,
@@ -76,19 +75,6 @@ def test_select_relay_format_returns_none_without_common_pcm_format() -> None:
     ) is None
 
 
-class FakeReadable:
-    def __init__(self, data: bytes) -> None:
-        self.data = data
-
-    def bytesAvailable(self) -> int:
-        return len(self.data)
-
-    def read(self, amount: int) -> bytes:
-        result = self.data[:amount]
-        self.data = self.data[amount:]
-        return result
-
-
 class FakeWritable:
     def __init__(self, free: int) -> None:
         self.free = free
@@ -100,46 +86,6 @@ class FakeWritable:
     def write(self, data: bytes) -> int:
         self.writes.append(bytes(data))
         return len(data)
-
-
-def test_relay_pump_forwards_only_available_bytes() -> None:
-    source = FakeReadable(b"abc")
-    sink = FakeWritable(20)
-
-    AudioRelayPump(source, sink, period_bytes=10).forward()
-
-    assert sink.writes == [b"abc"]
-
-
-def test_relay_pump_discards_stale_excess_under_backpressure() -> None:
-    source = FakeReadable(b"0123456789")
-    sink = FakeWritable(4)
-
-    AudioRelayPump(source, sink, period_bytes=6).forward()
-
-    assert sink.writes == [b"6789"]
-    assert source.bytesAvailable() == 0
-
-
-def test_relay_pump_writes_only_complete_pcm_frames() -> None:
-    source = FakeReadable(b"0123456789")
-    sink = FakeWritable(7)
-
-    AudioRelayPump(source, sink, period_bytes=9, bytes_per_frame=4).forward()
-
-    assert sink.writes == [b"4567"]
-
-
-def test_relay_pump_preserves_pcm_frame_split_between_reads() -> None:
-    source = FakeReadable(b"abc")
-    sink = FakeWritable(16)
-    pump = AudioRelayPump(source, sink, period_bytes=16, bytes_per_frame=4)
-
-    pump.forward()
-    source.data += b"defgh"
-    pump.forward()
-
-    assert sink.writes == [b"abcdefgh"]
 
 
 class FakeRuntime:
@@ -259,13 +205,11 @@ class FakeSignal:
 class FakeSource:
     def __init__(self, device: object, audio_format: QAudioFormat) -> None:
         self.created_thread = QThread.currentThread()
-        self.ready = FakeSignal()
+        self.output_io: object | None = None
         self.stopped = False
 
-    def start(self) -> FakeReadable:
-        readable = FakeReadable(b"")
-        readable.readyRead = self.ready  # type: ignore[attr-defined]
-        return readable
+    def start(self, output_io: object) -> None:
+        self.output_io = output_io
 
     def stop(self) -> None:
         self.stopped = True
@@ -290,7 +234,11 @@ class FakeSink:
         self.volume = volume
 
     def start(self) -> FakeWritable:
-        return FakeWritable(4096)
+        self.io = FakeWritable(self.buffer_size)
+        return self.io
+
+    def bytesFree(self) -> int:
+        return self.io.bytesFree()
 
     def stop(self) -> None:
         self.stopped = True
@@ -305,17 +253,50 @@ class FakeOpenErrorSource(FakeSource):
         self.stateChanged = FakeSignal()
         self.callbacks_at_start = 0
 
-    def start(self) -> FakeReadable:
+    def start(self, output_io: object) -> None:
         self.callbacks_at_start = len(self.stateChanged.callbacks)
-        readable = super().start()
-        self.stateChanged.emit(QAudio.State.StoppedState)
-        return readable
+        super().start(output_io)
+        self.stateChanged.emit()
 
-    def error(self) -> QAudio.Error:
-        return QAudio.Error.OpenError
+    def error(self) -> QtAudio.Error:
+        return QtAudio.Error.OpenError
 
-    def state(self) -> QAudio.State:
-        return QAudio.State.StoppedState
+    def state(self) -> QtAudio.State:
+        return QtAudio.State.StoppedState
+
+
+class FakeCurrentQtSource(FakeSource):
+    def error(self) -> QtAudio.Error:
+        return QtAudio.Error.NoError
+
+    def state(self) -> QtAudio.State:
+        return QtAudio.State.IdleState
+
+
+class FakeCurrentQtSink(FakeSink):
+    def error(self) -> QtAudio.Error:
+        return QtAudio.Error.NoError
+
+    def state(self) -> QtAudio.State:
+        return QtAudio.State.IdleState
+
+
+def test_qt_runtime_accepts_current_qt_audio_state_and_error_enums(
+    qtbot: QtBot,
+) -> None:
+    events: list[tuple[int, str | None]] = []
+    runtime = QtRelayRuntime(
+        lambda generation, message: events.append((generation, message)),
+        FakeCurrentQtSource,
+        FakeCurrentQtSink,
+    )
+    try:
+        runtime.apply(object(), object(), make_format(48000), 0.35, 1)
+        qtbot.waitUntil(lambda: bool(events))
+
+        assert events == [(1, None)]
+    finally:
+        runtime.close()
 
 
 def test_active_qt_runtime_closes_worker_thread(qtbot: QtBot) -> None:
@@ -345,6 +326,11 @@ def test_active_qt_runtime_closes_worker_thread(qtbot: QtBot) -> None:
     assert sources[0].created_thread is not QThread.currentThread()
     assert sinks[0].created_thread is sources[0].created_thread
     assert sinks[0].volume == 0.35
+    assert sinks[0].buffer_size >= make_format(48000).bytesForDuration(100_000)
+    assert sinks[0].io.writes[0] == bytes(
+        make_format(48000).bytesForDuration(100_000)
+    )
+    assert sources[0].output_io is sinks[0].io
     assert sources[0].stopped
     assert sinks[0].stopped
     assert not runtime.is_running

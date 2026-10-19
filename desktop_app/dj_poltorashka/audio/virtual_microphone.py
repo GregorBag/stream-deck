@@ -5,12 +5,13 @@ import math
 from typing import Protocol
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
-from PySide6.QtMultimedia import QAudio, QAudioFormat, QAudioSink, QAudioSource
+from PySide6.QtMultimedia import QAudioFormat, QAudioSink, QAudioSource, QtAudio
 
 from dj_poltorashka.audio.routing_models import AudioRoutingStatus
 
 
-_RELAY_PERIOD_US = 20_000
+_RELAY_BUFFER_US = 200_000
+_RELAY_PREROLL_US = 100_000
 
 
 def _format_key(audio_format: QAudioFormat) -> tuple[int, int, object]:
@@ -51,46 +52,6 @@ def select_relay_format(input_device: object, cable_device: object) -> QAudioFor
     return None
 
 
-class AudioRelayPump:
-    """Переносит только свежий ограниченный блок PCM-данных."""
-
-    def __init__(
-        self,
-        source: object,
-        sink: object,
-        period_bytes: int,
-        bytes_per_frame: int = 1,
-    ):
-        if period_bytes <= 0:
-            raise ValueError("Размер периода должен быть положительным")
-        if bytes_per_frame <= 0:
-            raise ValueError("Размер PCM-кадра должен быть положительным")
-        self._source = source
-        self._sink = sink
-        self._period_bytes = period_bytes
-        self._bytes_per_frame = bytes_per_frame
-        self._pending = b""
-
-    def forward(self) -> None:
-        available = max(0, int(self._source.bytesAvailable()))  # type: ignore[attr-defined]
-        if available == 0:
-            return
-        data = self._pending + bytes(  # type: ignore[attr-defined]
-            self._source.read(available)
-        )
-        usable = len(data) - len(data) % self._bytes_per_frame
-        self._pending = data[usable:]
-        complete_frames = data[:usable]
-        writable = min(
-            usable,
-            max(0, int(self._sink.bytesFree())),  # type: ignore[attr-defined]
-            self._period_bytes,
-        )
-        writable -= writable % self._bytes_per_frame
-        if writable > 0:
-            self._sink.write(complete_frames[-writable:])  # type: ignore[attr-defined]
-
-
 class RelayRuntime(Protocol):
     def apply(
         self,
@@ -123,9 +84,7 @@ class _RelayWorker(QObject):
         self._sink_factory = sink_factory
         self._source: object | None = None
         self._sink: object | None = None
-        self._source_io: object | None = None
         self._sink_io: object | None = None
-        self._pump: AudioRelayPump | None = None
         self._generation = 0
         self._configuring = False
 
@@ -148,24 +107,26 @@ class _RelayWorker(QObject):
             self._sink = sink
             self._connect_state_signal(source)
             self._connect_state_signal(sink)
-            period_bytes = max(1, audio_format.bytesForDuration(_RELAY_PERIOD_US))
-            sink.setBufferSize(period_bytes)  # type: ignore[attr-defined]
+            buffer_bytes = max(
+                audio_format.bytesPerFrame(),
+                audio_format.bytesForDuration(_RELAY_BUFFER_US),
+            )
+            sink.setBufferSize(buffer_bytes)  # type: ignore[attr-defined]
             sink.setVolume(volume)  # type: ignore[attr-defined]
             sink_io = sink.start()  # type: ignore[attr-defined]
-            source_io = source.start()  # type: ignore[attr-defined]
-            if source_io is None or sink_io is None:
-                raise RuntimeError("Qt не запустил аудиопоток")
+            if sink_io is None:
+                raise RuntimeError("Qt не открыл выход VB-CABLE")
+            preroll_bytes = min(
+                max(0, int(sink.bytesFree())),  # type: ignore[attr-defined]
+                audio_format.bytesForDuration(_RELAY_PREROLL_US),
+            )
+            preroll_bytes -= preroll_bytes % audio_format.bytesPerFrame()
+            if preroll_bytes and sink_io.write(bytes(preroll_bytes)) != preroll_bytes:  # type: ignore[attr-defined]
+                raise RuntimeError("Не удалось заполнить буфер VB-CABLE")
+            source.start(sink_io)  # type: ignore[attr-defined]
             self._require_started(source)
             self._require_started(sink)
-            self._source_io = source_io
             self._sink_io = sink_io
-            self._pump = AudioRelayPump(
-                source_io,
-                sink_io,
-                period_bytes,
-                audio_format.bytesPerFrame(),
-            )
-            source_io.readyRead.connect(self._forward)  # type: ignore[attr-defined]
             self._configuring = False
             self.configured.emit(generation)
         except Exception as error:
@@ -184,9 +145,7 @@ class _RelayWorker(QObject):
                 audio_object.deleteLater()  # type: ignore[attr-defined]
         self._source = None
         self._sink = None
-        self._source_io = None
         self._sink_io = None
-        self._pump = None
 
     @Slot()
     def shutdown(self) -> None:
@@ -194,36 +153,27 @@ class _RelayWorker(QObject):
         QThread.currentThread().quit()
 
     @Slot()
-    def _forward(self) -> None:
-        if self._pump is None:
-            return
-        try:
-            self._pump.forward()
-        except Exception as error:
-            self._emit_error(error)
-
-    @Slot(object)
-    def _check_state(self, state: object) -> None:
+    def _check_state(self) -> None:
         if self._configuring:
             return
         for audio_object in (self._source, self._sink):
             if audio_object is None or not hasattr(audio_object, "error"):
                 continue
-            if audio_object.error() != QAudio.Error.NoError:  # type: ignore[attr-defined]
+            if audio_object.error() != QtAudio.Error.NoError:  # type: ignore[attr-defined]
                 self._emit_error(RuntimeError("Ошибка Qt Audio"))
                 return
 
     @staticmethod
     def _require_started(audio_object: object) -> None:
         error_reader = getattr(audio_object, "error", None)
-        if error_reader is not None and error_reader() != QAudio.Error.NoError:
+        if error_reader is not None and error_reader() != QtAudio.Error.NoError:
             raise RuntimeError("Ошибка открытия Qt Audio")
         state_reader = getattr(audio_object, "state", None)
         if state_reader is None:
             return
         if state_reader() not in (
-            QAudio.State.ActiveState,
-            QAudio.State.IdleState,
+            QtAudio.State.ActiveState,
+            QtAudio.State.IdleState,
         ):
             raise RuntimeError("Qt Audio не перешёл в рабочее состояние")
 

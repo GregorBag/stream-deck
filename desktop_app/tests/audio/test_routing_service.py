@@ -29,6 +29,14 @@ class FakeRegistry:
         self.close_count += 1
 
 
+class FakeDevice:
+    def __init__(self, device_id: bytes) -> None:
+        self.device_id = device_id
+
+    def id(self) -> bytes:
+        return self.device_id
+
+
 class FakeRelay:
     def __init__(self, on_status: object) -> None:
         self.on_status = on_status
@@ -107,6 +115,41 @@ def test_default_device_change_switches_automatically_and_coalesces_status() -> 
     assert relay.calls[-1][0] == "new-default-microphone"
     assert service.monitor_device() == "new-default-monitor"
     assert [state.code for state in statuses] == ["active"]
+
+
+def test_repeated_device_notifications_do_not_restart_unchanged_microphone() -> None:
+    service, registry, relay, _ = make_service()
+    service.start()
+
+    for _ in range(20):
+        registry.callback()
+
+    assert relay.calls == [("default-microphone", "cable-input", 0.5)]
+    assert service.status.code == "active"
+
+
+def test_monitor_change_does_not_restart_microphone_relay() -> None:
+    service, registry, relay, _ = make_service()
+    service.start()
+    registry.default_monitor = "new-monitor"
+
+    registry.callback()
+
+    assert service.monitor_device() == "new-monitor"
+    assert relay.calls == [("default-microphone", "cable-input", 0.5)]
+
+
+def test_recreated_qt_device_wrappers_with_same_ids_do_not_restart_relay() -> None:
+    service, registry, relay, _ = make_service()
+    registry.default_input = FakeDevice(b"microphone")
+    registry.cable = FakeDevice(b"cable")
+    service.start()
+
+    registry.default_input = FakeDevice(b"microphone")
+    registry.cable = FakeDevice(b"cable")
+    registry.callback()
+
+    assert len(relay.calls) == 1
 
 
 def test_degraded_routes_remain_independently_available_and_recover() -> None:

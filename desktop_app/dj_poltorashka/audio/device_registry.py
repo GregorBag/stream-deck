@@ -13,6 +13,15 @@ def audio_device_id(device: object) -> str:
     return bytes(device.id()).hex()  # type: ignore[attr-defined]
 
 
+def _is_cable_output(device: object) -> bool:
+    if device is None:
+        return False
+    description = " ".join(device.description().split()).casefold()  # type: ignore[attr-defined]
+    return description.startswith("cable output") and (
+        "vb-audio virtual cable" in description
+    )
+
+
 class QtAudioDeviceRegistry:
     """Предоставляет актуальный снимок входных и выходных устройств."""
 
@@ -32,8 +41,17 @@ class QtAudioDeviceRegistry:
 
     def resolve_input(self, device_id: str | None):
         if device_id is None:
-            return self._media_devices.defaultAudioInput()
-        return self._find(self._media_devices.audioInputs(), device_id)
+            default_input = self._media_devices.defaultAudioInput()
+            if not _is_cable_output(default_input):
+                return default_input
+            microphones = [
+                device
+                for device in self._media_devices.audioInputs()
+                if not _is_cable_output(device)
+            ]
+            return microphones[0] if len(microphones) == 1 else None
+        selected = self._find(self._media_devices.audioInputs(), device_id)
+        return None if selected is not None and _is_cable_output(selected) else selected
 
     def resolve_monitor(self, device_id: str | None):
         if device_id is None:

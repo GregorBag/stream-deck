@@ -95,6 +95,27 @@ def test_default_resolution_follows_changed_windows_default() -> None:
     assert registry.resolve_monitor(None) is second
 
 
+def test_default_cable_output_uses_only_physical_microphone() -> None:
+    cable_output = FakeDevice(b"cable", "CABLE Output (VB-Audio Virtual Cable)")
+    microphone = FakeDevice(b"microphone", "Микрофон")
+    media = FakeMediaDevices([cable_output, microphone], [])
+    registry = QtAudioDeviceRegistry(media)
+
+    assert registry.resolve_input(None) is microphone
+    assert registry.resolve_input("6361626c65") is None
+
+
+def test_default_cable_output_does_not_guess_among_microphones() -> None:
+    cable_output = FakeDevice(b"cable", "CABLE Output (VB-Audio Virtual Cable)")
+    first = FakeDevice(b"first", "Первый микрофон")
+    second = FakeDevice(b"second", "Второй микрофон")
+    registry = QtAudioDeviceRegistry(
+        FakeMediaDevices([cable_output, first, second], [])
+    )
+
+    assert registry.resolve_input(None) is None
+
+
 def test_explicit_resolution_uses_id_and_missing_device_stays_missing() -> None:
     selected = FakeDevice(b"\x10\x20", "Одинаковое имя")
     duplicate = FakeDevice(b"\x30\x40", "Одинаковое имя")
