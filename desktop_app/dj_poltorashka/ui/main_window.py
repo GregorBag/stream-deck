@@ -74,7 +74,7 @@ class MainWindow:
         self._tabs.addTab(self._scroll_page(central_widget), make_icon("sliders"), "Конфигурация")
         shell_layout.addWidget(self._tabs, 1)
         self._widget.setCentralWidget(shell)
-        self._widget.statusBar().showMessage("DJ POLTORASHKA  /  CAT CLUB")
+        self._widget.statusBar().showMessage("DJ POLTORASHKA  /  SYNTHWAVE PANEL")
 
         active_group = QGroupBox("Активная настройка")
         active_group.setObjectName("active_configuration")

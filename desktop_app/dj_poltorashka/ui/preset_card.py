@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from dj_poltorashka.configuration.models import PresetConfig
-from dj_poltorashka.ui.theme import make_icon, set_accent
+from dj_poltorashka.ui.theme import accent_color, make_icon, set_accent
 
 
 class PresetCard:
@@ -26,7 +26,7 @@ class PresetCard:
         self._widget = QGroupBox()
         self._widget.setObjectName(f"preset_card_{preset_index}")
         self._widget.setProperty("role", "preset")
-        set_accent(self._widget, preset_index)
+        set_accent(self._widget, preset_index + 1)
         layout = QVBoxLayout(self._widget)
         layout.setSpacing(10)
 
@@ -39,7 +39,7 @@ class PresetCard:
         header_layout.addWidget(title)
         header_layout.addStretch()
         badge = QLabel()
-        badge.setPixmap(make_icon("paw", "#c783de", 26).pixmap(26, 26))
+        badge.setPixmap(make_icon("panel", accent_color(preset_index + 1), 26).pixmap(26, 26))
         header_layout.addWidget(badge)
         self._load_button = QPushButton("Загрузить")
         self._load_button.setObjectName(f"preset_load_{preset_index}")

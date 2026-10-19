@@ -1,15 +1,16 @@
-"""Общее оформление Cat Club и векторные значки интерфейса."""
+"""Общее оформление Synthwave Panel и векторные значки интерфейса."""
 
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPalette, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QProgressBar, QWidget
 
 
 _ASSETS = Path(__file__).parent / "assets"
-_ACCENTS = ("pink", "violet", "pink", "blue")
+_ACCENTS = ("cyan", "pink", "cyan", "violet")
+_ACCENT_COLORS = {"cyan": "#39d9f4", "pink": "#f448bd", "violet": "#a16aff"}
 _ICON_PATHS = {
     "sliders": '<path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 3v6m8 0v6M10 15v6"/>',
     "panel": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -32,36 +33,55 @@ def asset_path(name: str) -> Path:
 
 
 def apply_theme(application: QApplication) -> None:
-    if application.property("cat_club_theme"):
+    if application.property("synthwave_theme"):
         return
     application.setStyle("Fusion")
     application.setFont(QFont("Segoe UI", 10))
     palette = QPalette()
     for role, color in (
-        (QPalette.Window, "#100c1c"), (QPalette.WindowText, "#f4efff"),
-        (QPalette.Base, "#151126"), (QPalette.AlternateBase, "#1c1631"),
-        (QPalette.Text, "#f4efff"), (QPalette.Button, "#241b39"),
-        (QPalette.ButtonText, "#f4efff"), (QPalette.Highlight, "#9736c7"),
-        (QPalette.HighlightedText, "#ffffff"), (QPalette.ToolTipBase, "#291d3f"),
-        (QPalette.ToolTipText, "#f4efff"), (QPalette.PlaceholderText, "#a296bb"),
+        (QPalette.Window, "#090d20"), (QPalette.WindowText, "#edf1ff"),
+        (QPalette.Base, "#0b1129"), (QPalette.AlternateBase, "#121a36"),
+        (QPalette.Text, "#edf1ff"), (QPalette.Button, "#18213e"),
+        (QPalette.ButtonText, "#edf1ff"), (QPalette.Highlight, "#583492"),
+        (QPalette.HighlightedText, "#ffffff"), (QPalette.ToolTipBase, "#141c38"),
+        (QPalette.ToolTipText, "#edf1ff"), (QPalette.PlaceholderText, "#919dc0"),
     ):
         palette.setColor(role, QColor(color))
-    palette.setColor(QPalette.Disabled, QPalette.Text, QColor("#80748f"))
-    palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor("#80748f"))
+    palette.setColor(QPalette.Disabled, QPalette.Text, QColor("#737e9f"))
+    palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor("#737e9f"))
     application.setPalette(palette)
-    stylesheet = asset_path("cat_club.qss").read_text(encoding="utf-8")
+    stylesheet = asset_path("synthwave.qss").read_text(encoding="utf-8")
     stylesheet = stylesheet.replace("__DOWN_ARROW__", f'"{asset_path("chevron_down.svg").as_posix()}"')
     stylesheet = stylesheet.replace("__CHECK_MARK__", f'"{asset_path("check_mark.svg").as_posix()}"')
+    stylesheet = stylesheet.replace("__HEADER_GRID__", f'"{asset_path("synthwave_grid.svg").as_posix()}"')
     application.setStyleSheet(stylesheet)
     application.setWindowIcon(QIcon(str(asset_path("avatar.png"))))
-    application.setProperty("cat_club_theme", True)
+    application.setProperty("synthwave_theme", True)
 
 
 def set_accent(widget: QWidget, index: int) -> None:
     widget.setProperty("accent", _ACCENTS[index % len(_ACCENTS)])
 
 
-def make_icon(name: str, color: str = "#ddc6ff", size: int = 24) -> QIcon:
+def accent_color(index: int) -> str:
+    return _ACCENT_COLORS[_ACCENTS[index % len(_ACCENTS)]]
+
+
+def create_volume_indicator(index: int) -> QProgressBar:
+    indicator = QProgressBar()
+    indicator.setProperty("role", "volume_indicator")
+    set_accent(indicator, index)
+    indicator.setOrientation(Qt.Vertical)
+    indicator.setRange(0, 100)
+    indicator.setValue(0)
+    indicator.setTextVisible(False)
+    indicator.setFixedWidth(16)
+    indicator.setAccessibleName(f"Установленная громкость канала {index + 1}")
+    indicator.setToolTip("Установленная громкость канала")
+    return indicator
+
+
+def make_icon(name: str, color: str = "#b9b6f5", size: int = 24) -> QIcon:
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
         f'fill="none" stroke="{color}" stroke-width="1.8" '
@@ -88,7 +108,7 @@ def avatar_pixmap(size: int = 80) -> QPixmap:
     painter.setClipPath(path)
     painter.drawPixmap(0, 0, source.scaled(size * 2, size * 2, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
     painter.setClipping(False)
-    painter.setPen(QColor("#e555cc"))
+    painter.setPen(QColor("#dd4dd7"))
     painter.drawEllipse(QRectF(3, 3, size * 2 - 6, size * 2 - 6))
     painter.end()
     result.setDevicePixelRatio(2)

@@ -5,7 +5,7 @@ from collections.abc import Callable
 from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from dj_poltorashka.configuration.models import SoundButtonConfig
-from dj_poltorashka.ui.theme import make_icon, set_accent
+from dj_poltorashka.ui.theme import accent_color, make_icon, set_accent
 
 
 class SoundButton:
@@ -25,9 +25,9 @@ class SoundButton:
         layout.setSpacing(4)
 
         heading = QHBoxLayout()
-        paw = QLabel()
-        paw.setPixmap(make_icon("paw", "#efb4ea", 20).pixmap(20, 20))
-        heading.addWidget(paw)
+        icon = QLabel()
+        icon.setPixmap(make_icon("music", accent_color(button_index), 20).pixmap(20, 20))
+        heading.addWidget(icon)
         layout.addLayout(heading)
 
         self._name_label = QLabel("Пусто")

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QProgressBar,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -24,7 +25,7 @@ from dj_poltorashka.panel.events import (
     SliderChanged,
     SoundPressed,
 )
-from dj_poltorashka.ui.theme import make_icon, set_accent
+from dj_poltorashka.ui.theme import accent_color, create_volume_indicator, make_icon, set_accent
 
 
 class PanelSimulator:
@@ -54,6 +55,7 @@ class PanelSimulator:
         self._sliders: list[QSlider] = []
         self._mute_buttons: list[QPushButton] = []
         self._volume_values: list[QLabel] = []
+        self._volume_indicators: list[QProgressBar] = []
         for index in range(4):
             group = QGroupBox(f"Канал {index + 1}")
             group.setProperty("role", "channel")
@@ -69,7 +71,16 @@ class PanelSimulator:
             mute_button.setCheckable(True)
             mute_button.setObjectName(f"simulator_mute_{index}")
             mute_button.setIcon(make_icon("speaker", size=18))
-            group_layout.addWidget(slider, alignment=Qt.AlignHCenter)
+            fader_layout = QHBoxLayout()
+            fader_layout.addStretch()
+            fader_layout.addWidget(slider)
+            indicator = create_volume_indicator(index)
+            indicator.setObjectName(f"simulator_volume_indicator_{index}")
+            fader_layout.addWidget(indicator)
+            fader_layout.addStretch()
+            group_layout.addLayout(fader_layout, 1)
+            self._volume_indicators.append(indicator)
+            slider.valueChanged.connect(indicator.setValue)
             readout = QLabel("0%")
             readout.setProperty("role", "readout")
             readout.setAlignment(Qt.AlignCenter)
@@ -104,7 +115,7 @@ class PanelSimulator:
             button.setObjectName(f"simulator_sound_{index}")
             button.setProperty("role", "pad")
             set_accent(button, index)
-            button.setIcon(make_icon("paw", "#f2d5ff", 22))
+            button.setIcon(make_icon("music", accent_color(index), 22))
             button.clicked.connect(
                 lambda checked=False, button_index=index: self._sound_pressed(
                     button_index
@@ -150,6 +161,7 @@ class PanelSimulator:
         for index, channel in enumerate(panel.channels):
             self._sliders[index].setValue(round(channel.volume * 100))
             self._volume_values[index].setText(f"{self._sliders[index].value()}%")
+            self._volume_indicators[index].setValue(self._sliders[index].value())
             self._mute_buttons[index].setChecked(channel.muted)
             self._mute_buttons[index].setText("Включить звук" if channel.muted else "Заглушить")
         for index, sound in enumerate(panel.sound_buttons):
@@ -188,6 +200,7 @@ class PanelSimulator:
             )
             enabled = channel_is_assigned and not self._is_paused
             slider.setEnabled(enabled)
+            self._volume_indicators[index].setEnabled(enabled)
             self._mute_buttons[index].setEnabled(enabled)
         for index, button in enumerate(self._sound_buttons):
             sound_is_assigned = (

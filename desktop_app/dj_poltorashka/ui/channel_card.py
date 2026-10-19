@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.configuration.models import ChannelKind, MixerChannelConfig
-from dj_poltorashka.ui.theme import make_icon, set_accent
+from dj_poltorashka.ui.theme import create_volume_indicator, make_icon, set_accent
 
 
 _CHANNEL_OPTIONS: tuple[tuple[str, ChannelKind], ...] = (
@@ -90,6 +90,9 @@ class ChannelCard:
         self._volume_slider.setFixedWidth(32)
         self._volume_slider.setAccessibleName(f"Громкость канала {channel_index + 1}")
         fader_layout.addWidget(self._volume_slider)
+        self._volume_indicator = create_volume_indicator(channel_index)
+        self._volume_indicator.setObjectName(f"volume_indicator_{channel_index}")
+        fader_layout.addWidget(self._volume_indicator)
         fader_layout.addStretch()
         layout.addLayout(fader_layout, 1)
         self._volume_value = QLabel("0%")
@@ -116,6 +119,7 @@ class ChannelCard:
         self._volume_slider.valueChanged.connect(
             lambda value: self._volume_value.setText(f"{value}%")
         )
+        self._volume_slider.valueChanged.connect(self._volume_indicator.setValue)
         self._volume_slider.valueChanged.connect(
             lambda value: on_volume_changed(self._channel_index, value / 100.0)
         )
@@ -150,11 +154,13 @@ class ChannelCard:
         self._status_label.setVisible(bool(status_text))
         self._volume_slider.setValue(round(channel.volume * 100))
         self._volume_value.setText(f"{self._volume_slider.value()}%")
+        self._volume_indicator.setValue(self._volume_slider.value())
         self._mute_button.setChecked(channel.muted)
         self._mute_button.setText("Включить звук" if channel.muted else "Заглушить")
 
         is_assigned = channel.channel_kind != "unassigned"
         self._volume_slider.setEnabled(is_assigned)
+        self._volume_indicator.setEnabled(is_assigned)
         self._mute_button.setEnabled(is_assigned)
         self._application_button.setEnabled(channel.channel_kind == "application")
         del blockers

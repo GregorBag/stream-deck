@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QProgressBar,
     QSlider,
     QWidget,
 )
@@ -330,18 +331,23 @@ def test_fader_readout_tracks_user_input_and_silent_render(qtbot: QtBot) -> None
     main_window.render(make_stored_configuration())
     slider = main_window.widget.findChild(QSlider, "volume_slider_1")
     readout = main_window.widget.findChild(QLabel, "volume_value_1")
+    indicator = main_window.widget.findChild(QProgressBar, "volume_indicator_1")
 
     assert readout is not None
+    assert indicator is not None
     assert slider.orientation() == Qt.Vertical
     assert readout.text() == "65%"
+    assert indicator.value() == 65
     assert recorder.calls == []
 
     slider.setValue(32)
 
     assert readout.text() == "32%"
+    assert indicator.value() == 32
     assert recorder.calls == [("volume", 1, 0.32)]
     main_window.render(make_stored_configuration())
     assert readout.text() == "65%"
+    assert indicator.value() == 65
 
 
 def test_header_does_not_claim_a_physical_panel_is_connected(qtbot: QtBot) -> None:
