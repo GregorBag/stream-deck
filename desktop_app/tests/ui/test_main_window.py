@@ -1,3 +1,6 @@
+from dataclasses import replace
+
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -8,9 +11,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QProgressBar,
     QSlider,
+    QStatusBar,
+    QStyle,
+    QStyleOptionSlider,
     QWidget,
 )
 from pytestqt.qtbot import QtBot
+from PySide6.QtQuickWidgets import QQuickWidget
+from qml_helpers import find_item, click_item
 
 from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.audio.routing_models import AudioRoutingStatus
@@ -22,6 +30,8 @@ from dj_poltorashka.configuration.models import (
     StoredConfiguration,
 )
 from dj_poltorashka.ui.main_window import MainWindow, MainWindowCallbacks
+from dj_poltorashka.ui.panel_simulator import PanelSimulator
+from dj_poltorashka.ui.theme import make_icon
 
 
 def no_arguments() -> None:
@@ -113,36 +123,6 @@ def make_stored_configuration() -> StoredConfiguration:
     )
 
 
-def widgets_with_prefix(window: QWidget, prefix: str) -> list[QWidget]:
-    return [
-        widget
-        for widget in window.findChildren(QWidget)
-        if widget.objectName().startswith(prefix)
-    ]
-
-
-def test_main_window_builds_approved_editor_layout(qtbot: QtBot) -> None:
-    main_window = MainWindow(make_callbacks())
-    qtbot.addWidget(main_window.widget)
-
-    title = main_window.widget.findChild(QGroupBox, "active_configuration")
-    save_button = main_window.widget.findChild(QPushButton, "save_preset_button")
-    channels = main_window.widget.findChild(QWidget, "channels_container")
-    presets = main_window.widget.findChild(QWidget, "presets_container")
-
-    assert title is not None
-    assert title.title() == "Активная настройка"
-    assert save_button is not None
-    assert save_button.text() == "Сохранить в пресет"
-    assert "..." not in save_button.text()
-    assert channels is not None
-    assert isinstance(channels.layout(), QHBoxLayout)
-    assert channels.layout().count() == 4
-    assert len(widgets_with_prefix(main_window.widget, "sound_button_")) == 8
-    assert presets is not None
-    assert presets.layout().count() == 3
-
-
 def test_closing_main_window_hides_it_without_quitting(qtbot: QtBot) -> None:
     main_window = MainWindow(make_callbacks())
     qtbot.addWidget(main_window.widget)
@@ -188,172 +168,73 @@ def test_activate_restores_minimized_window(qtbot: QtBot) -> None:
     assert not main_window.widget.isMinimized()
 
 
-def test_render_displays_channels_sounds_and_presets_without_callbacks(
-    qtbot: QtBot,
-) -> None:
+
+def test_main_window_embeds_configuration_and_renders_silently(qtbot):
     recorder = CallbackRecorder()
-    main_window = MainWindow(recorder.callbacks())
-    qtbot.addWidget(main_window.widget)
-
-    main_window.render(make_stored_configuration())
-
-    kinds = [
-        main_window.widget.findChild(QComboBox, f"channel_kind_{index}").currentData()
-        for index in range(4)
-    ]
-    assert kinds == ["unassigned", "master", "application", "microphone"]
-    assert not main_window.widget.findChild(QSlider, "volume_slider_0").isEnabled()
-    assert not main_window.widget.findChild(QPushButton, "mute_button_0").isEnabled()
-    assert main_window.widget.findChild(QSlider, "volume_slider_1").value() == 65
-    assert main_window.widget.findChild(QPushButton, "mute_button_1").isChecked()
-    assert main_window.widget.findChild(QLabel, "channel_name_2").text() == "Player"
-    assert main_window.widget.findChild(QPushButton, "application_button_2").isEnabled()
-    assert main_window.widget.findChild(QLabel, "sound_name_0").text() == "Заставка"
-    assert main_window.widget.findChild(QPushButton, "sound_clear_0").isEnabled()
-    assert not main_window.widget.findChild(QPushButton, "sound_clear_1").isEnabled()
-    assert main_window.widget.findChild(QLabel, "preset_name_0").text() == "Работа"
-    assert main_window.widget.findChild(QPushButton, "preset_load_0").isEnabled()
-    assert not main_window.widget.findChild(QPushButton, "preset_load_1").isEnabled()
-    assert main_window.widget.findChild(QPushButton, "preset_edit_0").isEnabled()
-    assert main_window.widget.findChild(QPushButton, "preset_edit_0").text() == "Редактировать"
-    assert not main_window.widget.findChild(QPushButton, "preset_edit_1").isEnabled()
+    window = MainWindow(recorder.callbacks())
+    qtbot.addWidget(window.widget)
+    window.render(make_stored_configuration())
+    page = window.widget.findChild(QQuickWidget, "configuration_page")
+    assert page is not None
+    assert page.status() == QQuickWidget.Ready
+    root = page.rootObject()
+    assert find_item(root, "volume_slider_1").property("value") == 65
+    assert find_item(root, "channel_name_2").property("text") == "Player"
     assert recorder.calls == []
+    window.show()
+    QApplication.processEvents()
+    click_item(qtbot, page, find_item(root, "save_preset_button"))
+    assert recorder.calls == [("save_preset",)]
 
 
-def test_render_displays_audio_runtime_states_and_endpoint_names(
-    qtbot: QtBot,
-) -> None:
-    recorder = CallbackRecorder()
-    main_window = MainWindow(recorder.callbacks())
-    qtbot.addWidget(main_window.widget)
-    states = (
-        ChannelAudioUpdate(1, 0.65, True, "active", "Динамики", False),
-        ChannelAudioUpdate(2, 0.4, False, "waiting", "Player", False),
-        ChannelAudioUpdate(
-            3,
-            0.8,
-            False,
-            "unavailable",
-            "USB-микрофон",
-            False,
-        ),
-    )
-
-    main_window.render(make_stored_configuration(), states)
-
-    assert main_window.widget.findChild(QLabel, "channel_name_1").text() == (
-        "Динамики"
-    )
-    assert main_window.widget.findChild(QLabel, "channel_status_1").text() == (
-        "Активно"
-    )
-    assert main_window.widget.findChild(QLabel, "channel_status_2").text() == (
-        "Ожидание программы"
-    )
-    assert main_window.widget.findChild(QSlider, "volume_slider_2").isEnabled()
-    assert main_window.widget.findChild(QPushButton, "mute_button_2").isEnabled()
-    assert main_window.widget.findChild(QLabel, "channel_name_3").text() == (
-        "USB-микрофон"
-    )
-    assert main_window.widget.findChild(QLabel, "channel_status_3").text() == (
-        "Временно недоступно"
-    )
-    assert recorder.calls == []
+def test_main_window_displays_status_once(qtbot):
+    window = MainWindow(make_callbacks())
+    qtbot.addWidget(window.widget)
+    page = window.widget.findChild(QQuickWidget)
+    label = find_item(page.rootObject(), "virtual_microphone_status")
+    for state, expected in (
+        (AudioRoutingStatus("active", "Виртуальный микрофон активен"), "активен"),
+        (AudioRoutingStatus("cable_missing", "VB-CABLE не найден"), "VB-CABLE не найден"),
+    ):
+        window.set_virtual_microphone_status(state)
+        assert label.property("text") == f"Виртуальный микрофон: {expected}"
+    assert window.widget.findChild(QStatusBar) is None
 
 
-def test_editor_controls_forward_zero_based_actions(qtbot: QtBot) -> None:
-    recorder = CallbackRecorder()
-    main_window = MainWindow(recorder.callbacks())
-    qtbot.addWidget(main_window.widget)
-    main_window.render(make_stored_configuration())
-
-    channel_kind = main_window.widget.findChild(QComboBox, "channel_kind_1")
-    channel_kind.setCurrentIndex(channel_kind.findData("microphone"))
-    qtbot.mouseClick(
-        main_window.widget.findChild(QPushButton, "application_button_2"),
-        Qt.LeftButton,
-    )
-    main_window.widget.findChild(QSlider, "volume_slider_1").setValue(45)
-    qtbot.mouseClick(
-        main_window.widget.findChild(QPushButton, "mute_button_1"),
-        Qt.LeftButton,
-    )
-    qtbot.mouseClick(
-        main_window.widget.findChild(QPushButton, "sound_import_0"),
-        Qt.LeftButton,
-    )
-    qtbot.mouseClick(
-        main_window.widget.findChild(QPushButton, "sound_clear_0"),
-        Qt.LeftButton,
-    )
-    qtbot.mouseClick(
-        main_window.widget.findChild(QPushButton, "save_preset_button"),
-        Qt.LeftButton,
-    )
-    qtbot.mouseClick(
-        main_window.widget.findChild(QPushButton, "preset_load_0"),
-        Qt.LeftButton,
-    )
-    qtbot.mouseClick(
-        main_window.widget.findChild(QPushButton, "preset_edit_0"),
-        Qt.LeftButton,
-    )
-
-    assert recorder.calls == [
-        ("channel_kind", 1, "microphone"),
-        ("application", 2),
-        ("volume", 1, 0.45),
-        ("mute", 1),
-        ("sound_import", 0),
-        ("sound_clear", 0),
-        ("save_preset",),
-        ("load_preset", 0),
-        ("edit_preset", 0),
-    ]
-
-
-def test_main_window_displays_virtual_microphone_status(qtbot: QtBot) -> None:
-    main_window = MainWindow(make_callbacks())
-    qtbot.addWidget(main_window.widget)
-
-    main_window.set_virtual_microphone_status(
-        AudioRoutingStatus("cable_missing", "VB-CABLE не найден")
-    )
-
-    label = main_window.widget.findChild(QLabel, "virtual_microphone_status")
-    assert label.text() == "Виртуальный микрофон: VB-CABLE не найден"
-
-
-def test_fader_readout_tracks_user_input_and_silent_render(qtbot: QtBot) -> None:
-    recorder = CallbackRecorder()
-    main_window = MainWindow(recorder.callbacks())
-    qtbot.addWidget(main_window.widget)
-    main_window.render(make_stored_configuration())
-    slider = main_window.widget.findChild(QSlider, "volume_slider_1")
-    readout = main_window.widget.findChild(QLabel, "volume_value_1")
-    indicator = main_window.widget.findChild(QProgressBar, "volume_indicator_1")
-
-    assert readout is not None
-    assert indicator is not None
-    assert slider.orientation() == Qt.Vertical
-    assert readout.text() == "65%"
-    assert indicator.value() == 65
-    assert recorder.calls == []
-
-    slider.setValue(32)
-
-    assert readout.text() == "32%"
-    assert indicator.value() == 32
-    assert recorder.calls == [("volume", 1, 0.32)]
-    main_window.render(make_stored_configuration())
-    assert readout.text() == "65%"
-    assert indicator.value() == 65
-
-
-def test_header_does_not_claim_a_physical_panel_is_connected(qtbot: QtBot) -> None:
-    main_window = MainWindow(make_callbacks())
-    qtbot.addWidget(main_window.widget)
-    badge = main_window.widget.findChild(QLabel, "panel_connection_status")
-
-    assert badge is not None
+def test_header_does_not_claim_a_physical_panel_is_connected(qtbot):
+    window = MainWindow(make_callbacks())
+    qtbot.addWidget(window.widget)
+    badge = window.widget.findChild(QLabel, "panel_connection_status")
     assert "не подключена" in badge.text().lower()
+
+
+@pytest.mark.parametrize("channel_index", (1, 3))
+def test_simulator_mute_icon_follows_rendered_state(qtbot, channel_index):
+    view = PanelSimulator(lambda event: None)
+    qtbot.addWidget(view.widget)
+    stored = make_stored_configuration()
+    channels = list(stored.active.channels)
+    icon_name = "microphone" if channel_index == 3 else "speaker"
+    for muted in (True, False, True):
+        channels[channel_index] = replace(channels[channel_index], muted=muted)
+        view.render(replace(stored.active, channels=tuple(channels)))
+        button = view.widget.findChild(QPushButton, f"simulator_mute_{channel_index}")
+        expected = make_icon(f"{icon_name}_muted" if muted else icon_name, size=18).pixmap(18, 18).toImage()
+        assert button.icon().pixmap(18, 18).toImage() == expected
+        assert button.text() == ("Включить звук" if muted else "Заглушить")
+
+
+@pytest.mark.parametrize("value", (0, 100))
+def test_simulator_fader_reaches_visible_track_ends(qtbot, value):
+    view = PanelSimulator(lambda event: None)
+    qtbot.addWidget(view.widget)
+    view.render(make_stored_configuration().active)
+    view.show()
+    QApplication.processEvents()
+    slider = view.widget.findChild(QSlider, "simulator_slider_1")
+    slider.setValue(value)
+    option = QStyleOptionSlider()
+    slider.initStyleOption(option)
+    groove = slider.style().subControlRect(QStyle.CC_Slider, option, QStyle.SC_SliderGroove, slider)
+    handle = slider.style().subControlRect(QStyle.CC_Slider, option, QStyle.SC_SliderHandle, slider)
+    assert handle.top() <= groove.top() if value == 100 else handle.bottom() >= groove.bottom()

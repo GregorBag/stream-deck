@@ -7,8 +7,5 @@
   </defs>
   <path fill="url(#shade)" d="M0 0h1280v128H0z"/>
   <path fill="url(#grid)" opacity="0.5" d="M0 0h1280v128H0z"/>
-  <g fill="none" stroke="#d936ae" stroke-width="2.5" opacity="0.7">
-    <path d="m970 103 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24m0 24 20-24"/>
-  </g>
   <path d="M0 127h1280" stroke="#31528c"/>
 </svg>

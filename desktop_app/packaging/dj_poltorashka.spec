@@ -11,7 +11,7 @@ from dj_poltorashka.build_rules import filter_windows_binaries
 project_root = Path(SPECPATH).parent
 entry_point = project_root / "dj_poltorashka" / "__main__.py"
 
-datas = collect_data_files("dj_poltorashka.ui", includes=["assets/*"])
+datas = collect_data_files("dj_poltorashka.ui", includes=["assets/*", "qml/*.qml"])
 binaries = []
 hidden_imports = collect_submodules("pycaw")
 hidden_imports.extend(

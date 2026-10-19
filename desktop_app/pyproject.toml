@@ -17,7 +17,7 @@ where = ["."]
 include = ["dj_poltorashka*"]
 
 [tool.setuptools.package-data]
-"dj_poltorashka.ui" = ["assets/*.qss", "assets/*.png", "assets/*.svg"]
+"dj_poltorashka.ui" = ["assets/*.qss", "assets/*.png", "assets/*.svg", "qml/*.qml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

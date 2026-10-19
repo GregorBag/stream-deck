@@ -116,3 +116,41 @@ def test_missing_selected_device_remains_visible_and_selected(qtbot: QtBot) -> N
     assert input_combo.currentData() == "disconnected"
     assert input_combo.currentText() == "Недоступно — disconnected"
     assert controller.input_values == []
+
+
+def test_gain_readouts_follow_edits_and_refresh_without_saving(qtbot: QtBot) -> None:
+    dialog, controller = make_dialog(qtbot)
+    dialog.open()
+    microphone_value = dialog.widget.findChild(QLabel, "microphone_gain_value")
+    sound_value = dialog.widget.findChild(QLabel, "sound_gain_value")
+    assert microphone_value is not None
+    assert sound_value is not None
+    assert (microphone_value.text(), sound_value.text()) == ("40%", "70%")
+    slider = dialog.widget.findChild(QSlider, "sound_gain_slider")
+
+    slider.setValue(25)
+
+    assert sound_value.text() == "25%"
+    assert controller.sound_values == [0.25]
+    controller.settings = AudioRoutingSettings("02", None, 1.0, 0.0)
+    dialog.refresh()
+    assert (microphone_value.text(), sound_value.text()) == ("100%", "0%")
+    assert controller.microphone_values == []
+    assert controller.sound_values == [0.25]
+
+
+def test_failed_gain_change_restores_slider_and_readout(qtbot: QtBot, monkeypatch) -> None:
+    dialog, controller = make_dialog(qtbot)
+    dialog.open()
+
+    def fail(value: float) -> None:
+        raise OSError("Недоступно")
+
+    monkeypatch.setattr(controller, "set_sound_gain", fail)
+    slider = dialog.widget.findChild(QSlider, "sound_gain_slider")
+    slider.setValue(25)
+
+    readout = dialog.widget.findChild(QLabel, "sound_gain_value")
+    assert slider.value() == 70
+    assert readout is not None
+    assert readout.text() == "70%"

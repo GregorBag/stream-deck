@@ -21,6 +21,7 @@ _ICON_PATHS = {
     "app": '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8m-4-3v3M3 8h18"/>',
     "save": '<path d="M4 3h13l4 4v14H3V3Zm3 0v6h10V3M7 21v-8h10v8"/>',
     "play": '<path d="m8 4 12 8-12 8Z"/>',
+    "download": '<path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>',
     "edit": '<path d="m4 16 12-12 4 4L8 20l-5 1Zm10-10 4 4"/>',
     "plus": '<path d="M12 4v16M4 12h16"/>',
     "close": '<path d="m6 6 12 12M6 18 18 6"/>',
@@ -60,7 +61,9 @@ def apply_theme(application: QApplication) -> None:
 
 
 def set_accent(widget: QWidget, index: int) -> None:
-    widget.setProperty("accent", _ACCENTS[index % len(_ACCENTS)])
+    role = widget.property("role")
+    accent = "pink" if role in ("channel", "volume_indicator") else "violet" if role == "preset" else "cyan"
+    widget.setProperty("accent", accent)
 
 
 def accent_color(index: int) -> str:
@@ -81,13 +84,19 @@ def create_volume_indicator(index: int) -> QProgressBar:
     return indicator
 
 
-def make_icon(name: str, color: str = "#b9b6f5", size: int = 24) -> QIcon:
-    svg = (
+def icon_svg(name: str, color: str = "#b9b6f5") -> str:
+    paths = _ICON_PATHS[name.removesuffix("_muted")]
+    if name.endswith("_muted"):
+        paths += '<path d="m3 3 18 18"/>'
+    return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
         f'fill="none" stroke="{color}" stroke-width="1.8" '
-        f'stroke-linecap="round" stroke-linejoin="round">{_ICON_PATHS[name]}</svg>'
+        f'stroke-linecap="round" stroke-linejoin="round">{paths}</svg>'
     )
-    renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+
+
+def make_icon(name: str, color: str = "#b9b6f5", size: int = 24) -> QIcon:
+    renderer = QSvgRenderer(QByteArray(icon_svg(name, color).encode("utf-8")))
     pixmap = QPixmap(size * 2, size * 2)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)

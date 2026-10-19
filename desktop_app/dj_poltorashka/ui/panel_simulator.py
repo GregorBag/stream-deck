@@ -26,6 +26,7 @@ from dj_poltorashka.panel.events import (
     SoundPressed,
 )
 from dj_poltorashka.ui.theme import accent_color, create_volume_indicator, make_icon, set_accent
+from dj_poltorashka.ui.fader_scale import FaderScale
 
 
 class PanelSimulator:
@@ -56,6 +57,7 @@ class PanelSimulator:
         self._mute_buttons: list[QPushButton] = []
         self._volume_values: list[QLabel] = []
         self._volume_indicators: list[QProgressBar] = []
+        self._volume_scales: list[FaderScale] = []
         for index in range(4):
             group = QGroupBox(f"Канал {index + 1}")
             group.setProperty("role", "channel")
@@ -73,6 +75,9 @@ class PanelSimulator:
             mute_button.setIcon(make_icon("speaker", size=18))
             fader_layout = QHBoxLayout()
             fader_layout.addStretch()
+            scale = FaderScale(slider)
+            self._volume_scales.append(scale)
+            fader_layout.addWidget(scale.widget)
             fader_layout.addWidget(slider)
             indicator = create_volume_indicator(index)
             indicator.setObjectName(f"simulator_volume_indicator_{index}")
@@ -132,7 +137,7 @@ class PanelSimulator:
         for index in range(3):
             button = QPushButton(f"Пресет {index + 1}")
             button.setObjectName(f"simulator_preset_{index}")
-            button.setIcon(make_icon("play", size=18))
+            button.setIcon(make_icon("download", size=18))
             button.clicked.connect(
                 lambda checked=False, preset_index=index: self._on_event(
                     PresetPressed(preset_index)
@@ -164,6 +169,8 @@ class PanelSimulator:
             self._volume_indicators[index].setValue(self._sliders[index].value())
             self._mute_buttons[index].setChecked(channel.muted)
             self._mute_buttons[index].setText("Включить звук" if channel.muted else "Заглушить")
+            icon_name = "microphone" if channel.channel_kind == "microphone" else "speaker"
+            self._mute_buttons[index].setIcon(make_icon(f"{icon_name}_muted" if channel.muted else icon_name, size=18))
         for index, sound in enumerate(panel.sound_buttons):
             self._sound_buttons[index].setText(
                 sound.display_name or f"Кнопка {index + 1}"

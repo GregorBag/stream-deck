@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QSlider,
     QVBoxLayout,
@@ -53,8 +54,8 @@ class SettingsDialog:
         self._input_combo.setObjectName("input_device_combo")
         self._monitor_combo = QComboBox()
         self._monitor_combo.setObjectName("monitor_device_combo")
-        self._microphone_slider = self._make_slider("microphone_gain_slider")
-        self._sound_slider = self._make_slider("sound_gain_slider")
+        microphone_control, self._microphone_slider, self._microphone_value = self._make_gain_control("microphone_gain", "pink")
+        sound_control, self._sound_slider, self._sound_value = self._make_gain_control("sound_gain", "pink")
         self._status_label = QLabel("Состояние ещё не определено")
         self._status_label.setObjectName("virtual_microphone_status")
         self._status_label.setWordWrap(True)
@@ -63,8 +64,8 @@ class SettingsDialog:
         routing_layout.setContentsMargins(20, 24, 20, 20)
         routing_layout.addRow("Физический микрофон", self._input_combo)
         routing_layout.addRow("Мониторинг звуков", self._monitor_combo)
-        routing_layout.addRow("Громкость микрофона", self._microphone_slider)
-        routing_layout.addRow("Громкость звуков", self._sound_slider)
+        routing_layout.addRow("Громкость микрофона", microphone_control)
+        routing_layout.addRow("Громкость звуков", sound_control)
         routing_layout.addRow("Состояние", self._status_label)
         layout.addWidget(group)
         note = QLabel(
@@ -100,7 +101,11 @@ class SettingsDialog:
             self._refresh_routing_controls()
 
     def set_virtual_microphone_status(self, state: AudioRoutingStatus) -> None:
-        self._status_label.setText(state.message)
+        message = state.message
+        prefix = "Виртуальный микрофон"
+        if message.casefold().startswith(prefix.casefold()):
+            message = message[len(prefix):].lstrip(" :—–-")
+        self._status_label.setText(message)
         self._status_label.setProperty("status_code", state.code)
 
     def _set_autostart(self, enabled: bool) -> None:
@@ -139,6 +144,8 @@ class SettingsDialog:
         )
         self._microphone_slider.setValue(round(settings.microphone_gain * 100))
         self._sound_slider.setValue(round(settings.sound_gain * 100))
+        self._microphone_value.setText(f"{self._microphone_slider.value()}%")
+        self._sound_value.setText(f"{self._sound_slider.value()}%")
         del blockers
 
     @staticmethod
@@ -191,8 +198,24 @@ class SettingsDialog:
             self._refresh_routing_controls()
 
     @staticmethod
-    def _make_slider(object_name: str) -> QSlider:
+    def _make_gain_control(name: str, accent: str) -> tuple[QWidget, QSlider, QLabel]:
+        control = QWidget()
+        layout = QHBoxLayout(control)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
         slider = QSlider(Qt.Orientation.Horizontal)
-        slider.setObjectName(object_name)
+        slider.setObjectName(f"{name}_slider")
+        slider.setProperty("role", "gain")
+        slider.setProperty("accent", accent)
+        slider.setFixedHeight(34)
         slider.setRange(0, 100)
-        return slider
+        readout = QLabel("0%")
+        readout.setObjectName(f"{name}_value")
+        readout.setProperty("role", "gain_value")
+        readout.setProperty("accent", accent)
+        readout.setFixedWidth(64)
+        readout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        slider.valueChanged.connect(lambda value: readout.setText(f"{value}%"))
+        layout.addWidget(slider, 1)
+        layout.addWidget(readout)
+        return control, slider, readout

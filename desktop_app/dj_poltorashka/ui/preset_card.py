@@ -44,7 +44,7 @@ class PresetCard:
         self._load_button = QPushButton("Загрузить")
         self._load_button.setObjectName(f"preset_load_{preset_index}")
         self._load_button.setProperty("role", "primary")
-        self._load_button.setIcon(make_icon("play", "#fff0fc", 17))
+        self._load_button.setIcon(make_icon("download", "#fff0fc", 17))
         self._edit_button = QPushButton("Редактировать")
         self._edit_button.setObjectName(f"preset_edit_{preset_index}")
         self._edit_button.setIcon(make_icon("edit", size=16))

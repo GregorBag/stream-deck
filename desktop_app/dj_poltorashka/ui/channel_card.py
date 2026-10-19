@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 
 from dj_poltorashka.audio.models import ChannelAudioUpdate
 from dj_poltorashka.configuration.models import ChannelKind, MixerChannelConfig
+from dj_poltorashka.ui.elided_label import ElidedLabel
+from dj_poltorashka.ui.fader_scale import FaderScale
 from dj_poltorashka.ui.theme import create_volume_indicator, make_icon, set_accent
 
 
@@ -47,11 +49,8 @@ class ChannelCard:
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(6)
 
-        self._name_label = QLabel("Не назначен")
-        self._name_label.setObjectName(f"channel_name_{channel_index}")
-        self._name_label.setProperty("role", "card_name")
-        self._name_label.setWordWrap(True)
-        layout.addWidget(self._name_label)
+        self._name_label = ElidedLabel(f"channel_name_{channel_index}")
+        layout.addWidget(self._name_label.widget)
 
         self._kind_combo = QComboBox()
         self._kind_combo.setObjectName(f"channel_kind_{channel_index}")
@@ -74,21 +73,15 @@ class ChannelCard:
         layout.addWidget(self._application_button)
 
         fader_layout = QHBoxLayout()
-        scale_layout = QVBoxLayout()
-        for value in (100, 75, 50, 25, 0):
-            mark = QLabel(str(value))
-            mark.setProperty("role", "muted")
-            scale_layout.addWidget(mark, alignment=Qt.AlignRight)
-            if value:
-                scale_layout.addStretch()
         fader_layout.addStretch()
-        fader_layout.addLayout(scale_layout)
         self._volume_slider = QSlider(Qt.Vertical)
         self._volume_slider.setObjectName(f"volume_slider_{channel_index}")
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setMinimumHeight(112)
         self._volume_slider.setFixedWidth(32)
         self._volume_slider.setAccessibleName(f"Громкость канала {channel_index + 1}")
+        self._volume_scale = FaderScale(self._volume_slider)
+        fader_layout.addWidget(self._volume_scale.widget)
         fader_layout.addWidget(self._volume_slider)
         self._volume_indicator = create_volume_indicator(channel_index)
         self._volume_indicator.setObjectName(f"volume_indicator_{channel_index}")
@@ -147,8 +140,7 @@ class ChannelCard:
         display_name = self._display_name(channel)
         if audio_state is not None and audio_state.display_name is not None:
             display_name = audio_state.display_name
-        self._name_label.setText(display_name)
-        self._name_label.setToolTip(display_name)
+        self._name_label.set_text(display_name)
         status_text = self._status_text(audio_state)
         self._status_label.setText(status_text)
         self._status_label.setVisible(bool(status_text))
@@ -157,6 +149,8 @@ class ChannelCard:
         self._volume_indicator.setValue(self._volume_slider.value())
         self._mute_button.setChecked(channel.muted)
         self._mute_button.setText("Включить звук" if channel.muted else "Заглушить")
+        icon_name = "microphone" if channel.channel_kind == "microphone" else "speaker"
+        self._mute_button.setIcon(make_icon(f"{icon_name}_muted" if channel.muted else icon_name, size=18))
 
         is_assigned = channel.channel_kind != "unassigned"
         self._volume_slider.setEnabled(is_assigned)
