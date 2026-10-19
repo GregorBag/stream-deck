@@ -11,6 +11,7 @@ from dj_poltorashka.configuration.editor import PanelConfigurationEditor
 from dj_poltorashka.configuration.models import (
     PanelConfiguration,
     PresetConfig,
+    SoundButtonConfig,
     StoredConfiguration,
 )
 from dj_poltorashka.configuration.service import ConfigurationService
@@ -22,6 +23,7 @@ from dj_poltorashka.panel.events import (
     SoundPressed,
 )
 from dj_poltorashka.sounds.library import SoundLibrary
+from dj_poltorashka.ui.preset_edit_dialog import PresetEditResult
 
 
 class InMemoryRepository:
@@ -34,8 +36,11 @@ class InMemoryRepository:
         self.draft = draft
         self.fail_draft_save = False
         self.fail_draft_clear = False
+        self.fail_save = False
 
     def save(self, stored: StoredConfiguration) -> None:
+        if self.fail_save:
+            raise OSError("configuration save failed")
         self.saved = stored
 
     def load_draft(self) -> PanelConfiguration | None:
@@ -103,6 +108,8 @@ class FakeDialogs:
         self.exit_choice = "cancel"
         self.restore_answer = False
         self.errors: list[tuple[str, str]] = []
+        self.preset_edit_result: PresetEditResult | None = None
+        self.edited_presets: list[PresetConfig] = []
 
     def choose_sound_file(self) -> Path | None:
         return self.sound_path
@@ -115,6 +122,11 @@ class FakeDialogs:
         stored: StoredConfiguration,
     ) -> tuple[int, str] | None:
         return self.preset_selection
+
+    def edit_preset(self, preset: PresetConfig, on_save) -> None:
+        self.edited_presets.append(preset)
+        if self.preset_edit_result is not None:
+            on_save(self.preset_edit_result)
 
     def confirm_overwrite(self, name: str) -> bool:
         return self.overwrite_answer
@@ -295,6 +307,89 @@ def test_load_preset_uses_zero_based_index_and_refreshes_views(tmp_path: Path) -
     assert context.service.stored_configuration.active == preset_panel
     assert context.audio.applied == [preset_panel]
     assert_views_show_service_state(context)
+
+
+def test_edit_preset_changes_only_selected_slot_without_audio_or_draft(tmp_path: Path) -> None:
+    initial = create_default_stored_configuration()
+    active = PanelConfigurationEditor.set_volume(initial.active, 0, 0.8)
+    old = PresetConfig("Работа", initial.active)
+    stored = StoredConfiguration(active, initial.baseline, (old, None, None))
+    context = ControllerContext(tmp_path, stored)
+    context.repository.draft = active
+    edited_panel = PanelConfigurationEditor.set_volume(initial.active, 0, 0.2)
+    context.dialogs.preset_edit_result = PresetEditResult("Игры", edited_panel, (None,) * 8)
+
+    context.controller.edit_preset(0)
+
+    updated = context.service.stored_configuration
+    assert updated.presets[0] == PresetConfig("Игры", edited_panel)
+    assert updated.active == active
+    assert updated.baseline == initial.baseline
+    assert context.service.is_dirty
+    assert context.repository.draft == active
+    assert context.audio.applied == context.audio.adopted == []
+    assert context.dialogs.edited_presets == [old]
+    assert_views_show_service_state(context)
+
+
+def test_cancelled_preset_edit_changes_nothing(tmp_path: Path) -> None:
+    initial = create_default_stored_configuration()
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    context = ControllerContext(tmp_path, stored)
+
+    context.controller.edit_preset(0)
+
+    assert context.service.stored_configuration == stored
+    assert context.repository.saved == stored
+    assert context.audio.applied == []
+
+
+def test_replaced_sound_imports_only_final_source(tmp_path: Path) -> None:
+    initial = create_default_stored_configuration()
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    context = ControllerContext(tmp_path, stored)
+    final_source = tmp_path / "final.mp3"
+    final_source.write_bytes(b"final")
+    sources = (final_source,) + (None,) * 7
+    context.dialogs.preset_edit_result = PresetEditResult("Работа", initial.active, sources)
+
+    context.controller.edit_preset(0)
+
+    sound = context.service.stored_configuration.presets[0].panel.sound_buttons[0]
+    assert sound == SoundButtonConfig("sound-id.mp3", "final")
+    assert sorted(path.name for path in (tmp_path / "sounds").iterdir()) == ["sound-id.mp3"]
+
+
+def test_save_failure_removes_new_sound_and_preserves_state(tmp_path: Path) -> None:
+    initial = create_default_stored_configuration()
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    context = ControllerContext(tmp_path, stored)
+    source = tmp_path / "new.mp3"
+    source.write_bytes(b"audio")
+    context.dialogs.preset_edit_result = PresetEditResult("Новый", initial.active, (source,) + (None,) * 7)
+    context.repository.fail_save = True
+
+    context.controller.edit_preset(0)
+
+    assert context.service.stored_configuration == stored
+    assert list((tmp_path / "sounds").iterdir()) == []
+    assert context.dialogs.errors == [("Пресет", "configuration save failed")]
+
+
+def test_second_sound_import_failure_removes_first_import(tmp_path: Path) -> None:
+    initial = create_default_stored_configuration()
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    context = ControllerContext(tmp_path, stored)
+    first = tmp_path / "first.mp3"
+    first.write_bytes(b"audio")
+    missing = tmp_path / "missing.mp3"
+    context.dialogs.preset_edit_result = PresetEditResult("Работа", initial.active, (first, missing) + (None,) * 6)
+
+    context.controller.edit_preset(0)
+
+    assert context.service.stored_configuration == stored
+    assert list((tmp_path / "sounds").iterdir()) == []
+    assert "не найден" in context.dialogs.errors[0][1]
 
 
 def test_failed_draft_save_reports_error_and_renders_unchanged_state(

@@ -166,6 +166,7 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
             sound_clear_requested=lambda index: controller().clear_sound(index),
             save_preset_requested=lambda: controller().save_active_to_preset(),
             load_preset_requested=lambda index: controller().load_preset(index),
+            edit_preset_requested=lambda index: controller().edit_preset(index),
         )
     )
     simulator = PanelSimulator(lambda event: controller().handle_panel_event(event))

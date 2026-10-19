@@ -34,6 +34,7 @@ class MainWindowCallbacks:
     sound_clear_requested: Callable[[int], None]
     save_preset_requested: Callable[[], None]
     load_preset_requested: Callable[[int], None]
+    edit_preset_requested: Callable[[int], None]
 
 
 class MainWindow:
@@ -100,7 +101,11 @@ class MainWindow:
         presets_container.setObjectName("presets_container")
         presets_layout = QVBoxLayout(presets_container)
         self._preset_cards = tuple(
-            PresetCard(index, callbacks.load_preset_requested)
+            PresetCard(
+                index,
+                callbacks.load_preset_requested,
+                callbacks.edit_preset_requested,
+            )
             for index in range(3)
         )
         for card in self._preset_cards:

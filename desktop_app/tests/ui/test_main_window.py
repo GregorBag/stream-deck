@@ -45,6 +45,7 @@ def make_callbacks() -> MainWindowCallbacks:
         sound_clear_requested=one_argument,
         save_preset_requested=no_arguments,
         load_preset_requested=one_argument,
+        edit_preset_requested=one_argument,
     )
 
 
@@ -73,6 +74,9 @@ class CallbackRecorder:
             save_preset_requested=lambda: self.calls.append(("save_preset",)),
             load_preset_requested=lambda index: self.calls.append(
                 ("load_preset", index)
+            ),
+            edit_preset_requested=lambda index: self.calls.append(
+                ("edit_preset", index)
             ),
         )
 
@@ -209,6 +213,9 @@ def test_render_displays_channels_sounds_and_presets_without_callbacks(
     assert main_window.widget.findChild(QLabel, "preset_name_0").text() == "Работа"
     assert main_window.widget.findChild(QPushButton, "preset_load_0").isEnabled()
     assert not main_window.widget.findChild(QPushButton, "preset_load_1").isEnabled()
+    assert main_window.widget.findChild(QPushButton, "preset_edit_0").isEnabled()
+    assert main_window.widget.findChild(QPushButton, "preset_edit_0").text() == "Редактировать"
+    assert not main_window.widget.findChild(QPushButton, "preset_edit_1").isEnabled()
     assert recorder.calls == []
 
 
@@ -286,6 +293,10 @@ def test_editor_controls_forward_zero_based_actions(qtbot: QtBot) -> None:
         main_window.widget.findChild(QPushButton, "preset_load_0"),
         Qt.LeftButton,
     )
+    qtbot.mouseClick(
+        main_window.widget.findChild(QPushButton, "preset_edit_0"),
+        Qt.LeftButton,
+    )
 
     assert recorder.calls == [
         ("channel_kind", 1, "microphone"),
@@ -296,6 +307,7 @@ def test_editor_controls_forward_zero_based_actions(qtbot: QtBot) -> None:
         ("sound_clear", 0),
         ("save_preset",),
         ("load_preset", 0),
+        ("edit_preset", 0),
     ]
 
 

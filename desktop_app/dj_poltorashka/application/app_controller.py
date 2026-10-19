@@ -8,9 +8,11 @@ from dj_poltorashka.audio.models import AudioTarget, ChannelAudioUpdate
 from dj_poltorashka.configuration.models import (
     ChannelKind,
     MixerChannelConfig,
+    PresetConfig,
     SoundButtonConfig,
 )
 from dj_poltorashka.panel.event_router import PanelEventRouter
+from dj_poltorashka.ui.preset_edit_dialog import PresetEditResult
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -176,6 +178,57 @@ class AppController:
                 panel
             )
         self._refresh()
+
+    def edit_preset(self, preset_index: int) -> None:
+        presets = self._configuration_service.stored_configuration.presets
+        if (
+            isinstance(preset_index, bool)
+            or not isinstance(preset_index, int)
+            or not 0 <= preset_index < len(presets)
+        ):
+            self._dialogs.show_error("Пресет", "Неизвестный слот пресета")
+            return
+        preset = presets[preset_index]
+        if preset is None:
+            self._dialogs.show_error("Пресет", "Выбранный слот пресета пуст")
+            return
+        self._dialogs.edit_preset(
+            preset,
+            lambda result: self._save_edited_preset(preset_index, result),
+        )
+
+    def _save_edited_preset(
+        self,
+        preset_index: int,
+        result: PresetEditResult,
+    ) -> bool:
+        imported_paths: list[Path] = []
+        try:
+            panel = result.panel
+            for button_index, source in enumerate(result.sound_sources):
+                if source is None:
+                    continue
+                imported = self._sound_library.import_file(source)
+                imported_paths.append(imported.path)
+                panel = self._editor.set_sound(
+                    panel,
+                    button_index,
+                    SoundButtonConfig(imported.sound_id, imported.display_name),
+                )
+            self._configuration_service.replace_preset(
+                preset_index + 1,
+                PresetConfig(result.name, panel),
+            )
+        except (OSError, ValueError, LookupError, IndexError) as error:
+            for path in imported_paths:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    _LOGGER.exception("Не удалось удалить звук после ошибки пресета: %s", path)
+            self._dialogs.show_error("Пресет", str(error))
+            return False
+        self._refresh()
+        return True
 
     def save_active_to_preset(self) -> bool:
         selection = self._dialogs.choose_preset(

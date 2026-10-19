@@ -19,6 +19,7 @@ class PresetCard:
         self,
         preset_index: int,
         on_load_requested: Callable[[int], None],
+        on_edit_requested: Callable[[int], None],
     ):
         self._preset_index = preset_index
         self._widget = QGroupBox()
@@ -34,6 +35,9 @@ class PresetCard:
         self._load_button = QPushButton("Загрузить")
         self._load_button.setObjectName(f"preset_load_{preset_index}")
         header_layout.addWidget(self._load_button)
+        self._edit_button = QPushButton("Редактировать")
+        self._edit_button.setObjectName(f"preset_edit_{preset_index}")
+        header_layout.addWidget(self._edit_button)
         layout.addWidget(header)
 
         self._name_label = QLabel("Пусто")
@@ -48,6 +52,9 @@ class PresetCard:
         self._load_button.clicked.connect(
             lambda: on_load_requested(self._preset_index)
         )
+        self._edit_button.clicked.connect(
+            lambda: on_edit_requested(self._preset_index)
+        )
 
     @property
     def widget(self) -> QGroupBox:
@@ -58,6 +65,7 @@ class PresetCard:
             self._name_label.setText("Пусто")
             self._summary_label.setText("Нет сохранённой настройки")
             self._load_button.setEnabled(False)
+            self._edit_button.setEnabled(False)
             return
 
         assigned_channels = sum(
@@ -73,3 +81,4 @@ class PresetCard:
             f"Каналов: {assigned_channels}; звуков: {assigned_sounds}"
         )
         self._load_button.setEnabled(True)
+        self._edit_button.setEnabled(True)
