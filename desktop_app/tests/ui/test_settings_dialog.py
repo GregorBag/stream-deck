@@ -154,3 +154,93 @@ def test_failed_gain_change_restores_slider_and_readout(qtbot: QtBot, monkeypatc
     assert slider.value() == 70
     assert readout is not None
     assert readout.text() == "70%"
+
+
+
+def make_lighting_dialog(qtbot, tmp_path):
+    from types import SimpleNamespace
+    from dj_poltorashka.application.settings_controller import SettingsController
+    from dj_poltorashka.panel.lighting import LightingSettingsRepository
+    repository = LightingSettingsRepository(tmp_path / "lighting.json")
+    controller = SettingsController(SimpleNamespace(is_enabled=lambda: False), lighting_repository=repository)
+    errors = []
+    dialog = SettingsDialog(controller, lambda *args: errors.append(args))
+    qtbot.addWidget(dialog.widget)
+    dialog.open()
+    return dialog, controller, repository, errors
+
+
+def test_rgb_controls_save_three_mute_colors_and_brightness(qtbot, tmp_path):
+    from PySide6.QtWidgets import QLineEdit, QPushButton
+    from dj_poltorashka.panel.lighting import RgbColor
+    dialog, controller, repository, errors = make_lighting_dialog(qtbot, tmp_path)
+    slider = dialog.widget.findChild(QSlider, "lighting_brightness_slider")
+    assert slider.maximum() == 50
+    assert slider.value() == 50
+    for name, color in (("mute_active", "#123456"), ("mute_muted", "#ABCDEF"), ("mute_unassigned", "#102030")):
+        dialog.widget.findChild(QLineEdit, f"lighting_{name}").setText(color)
+    slider.setValue(30)
+    dialog.widget.findChild(QPushButton, "save_lighting_button").click()
+    saved = repository.load()
+    assert saved == controller.lighting_settings()
+    assert saved.mute_active == RgbColor(18, 52, 86)
+    assert saved.mute_muted == RgbColor(171, 205, 239)
+    assert saved.mute_unassigned == RgbColor(16, 32, 48)
+    assert saved.brightness == 0.3
+    assert errors == []
+
+
+def test_invalid_rgb_does_not_save_partial_settings(qtbot, tmp_path):
+    from PySide6.QtWidgets import QLineEdit, QPushButton
+    from dj_poltorashka.panel.lighting import LightingSettings
+    dialog, controller, repository, errors = make_lighting_dialog(qtbot, tmp_path)
+    dialog.widget.findChild(QLineEdit, "lighting_mute_active").setText("#112233")
+    dialog.widget.findChild(QLineEdit, "lighting_mute_muted").setText("#GG0000")
+    dialog.widget.findChild(QPushButton, "save_lighting_button").click()
+    assert controller.lighting_settings() == LightingSettings()
+    assert repository.load() == LightingSettings()
+    assert len(errors) == 1
+
+
+def test_palette_selection_updates_rgb_field_without_saving(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QColorDialog, QLineEdit, QPushButton
+    from dj_poltorashka.panel.lighting import LightingSettings
+    dialog, controller, repository, errors = make_lighting_dialog(qtbot, tmp_path)
+    calls = []
+    def choose(initial, parent, title):
+        calls.append((initial.name(), title))
+        return QColor("#123ABC")
+    monkeypatch.setattr(QColorDialog, "getColor", choose)
+    dialog.widget.findChild(QPushButton, "lighting_preview_mute_active").click()
+    assert dialog.widget.findChild(QLineEdit, "lighting_mute_active").text() == "#123ABC"
+    assert len(calls) == 1
+    assert controller.lighting_settings() == LightingSettings()
+    assert repository.load() == LightingSettings()
+    assert errors == []
+
+
+def test_cancelling_palette_preserves_input(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QColorDialog, QLineEdit, QPushButton
+    dialog, _, _, _ = make_lighting_dialog(qtbot, tmp_path)
+    edit = dialog.widget.findChild(QLineEdit, "lighting_perimeter")
+    previous = edit.text()
+    monkeypatch.setattr(QColorDialog, "getColor", lambda *args: QColor())
+    dialog.widget.findChild(QPushButton, "lighting_preview_perimeter").click()
+    assert edit.text() == previous
+
+
+def test_failed_lighting_save_preserves_controller_state_and_input(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QLineEdit, QPushButton
+    from dj_poltorashka.panel.lighting import LightingSettings
+    dialog, controller, repository, errors = make_lighting_dialog(qtbot, tmp_path)
+    def fail(settings):
+        raise OSError("write failed")
+    monkeypatch.setattr(repository, "save", fail)
+    edit = dialog.widget.findChild(QLineEdit, "lighting_perimeter")
+    edit.setText("#123456")
+    dialog.widget.findChild(QPushButton, "save_lighting_button").click()
+    assert controller.lighting_settings() == LightingSettings()
+    assert edit.text() == "#123456"
+    assert len(errors) == 1

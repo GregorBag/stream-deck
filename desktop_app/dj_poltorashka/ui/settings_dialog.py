@@ -2,15 +2,21 @@
 
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import replace
 
 from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QFormLayout,
     QGroupBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QPushButton,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -22,6 +28,7 @@ from dj_poltorashka.audio.routing_models import (
     AudioRoutingStatus,
 )
 from dj_poltorashka.audio.routing_settings import AudioRoutingSettings
+from dj_poltorashka.panel.lighting import COLOR_LABELS, RgbColor
 
 
 class SettingsDialog:
@@ -75,6 +82,61 @@ class SettingsDialog:
         note.setProperty("role", "muted")
         note.setWordWrap(True)
         layout.addWidget(note)
+        self._color_edits: dict[str, QLineEdit] = {}
+        self._color_previews: dict[str, QPushButton] = {}
+        lighting_group = QGroupBox("Подсветка панели")
+        lighting_group.setObjectName("lighting_group")
+        lighting_layout = QVBoxLayout(lighting_group)
+        lighting_layout.setSpacing(18)
+        brightness_control, self._brightness_slider, _ = self._make_gain_control("lighting_brightness", "pink")
+        self._brightness_slider.setRange(0, 50)
+        self._brightness_slider.setValue(50)
+        brightness_row = QHBoxLayout()
+        brightness_row.addWidget(QLabel("Общая яркость"))
+        brightness_row.addWidget(brightness_control, 1)
+        lighting_layout.addLayout(brightness_row)
+
+        colors_row = QHBoxLayout()
+        colors_row.setSpacing(20)
+        color_grid = QGridLayout()
+        color_grid.setHorizontalSpacing(16)
+        color_grid.setVerticalSpacing(6)
+        color_groups = (
+            ("Программируемая кнопка", (("sound_ready", "Настроена"), ("sound_playing", "Воспроизводится"), ("sound_unassigned", "Не назначена"))),
+            ("Mute", (("mute_active", "Активен"), ("mute_muted", "Заглушён"), ("mute_unassigned", "Не активен"))),
+            ("Пресет", (("preset_active", "Активен"), ("preset_saved", "Сохранён"), ("preset_empty", "Пустой"))),
+        )
+        for group_index, (group_label, colors) in enumerate(color_groups):
+            heading_row = group_index * 3
+            color_grid.addWidget(QLabel(group_label), heading_row + 1, 0, Qt.AlignmentFlag.AlignVCenter)
+            for column_index, (name, state_label) in enumerate(colors, 1):
+                color_grid.addWidget(QLabel(state_label), heading_row, column_index)
+                color_grid.addWidget(self._make_color_control(name), heading_row + 1, column_index)
+            color_grid.setRowMinimumHeight(heading_row + 2, 6)
+        colors_row.addLayout(color_grid)
+
+        perimeter_group = QGroupBox("Периметр")
+        perimeter_group.setObjectName("perimeter_color_group")
+        perimeter_layout = QVBoxLayout(perimeter_group)
+        perimeter_layout.setSpacing(12)
+        perimeter_layout.addWidget(QLabel("Постоянный цвет"))
+        perimeter_layout.addWidget(self._make_color_control("perimeter"))
+        perimeter_note = QLabel("При потере связи — белое мигание")
+        perimeter_note.setWordWrap(True)
+        perimeter_note.setProperty("role", "muted")
+        perimeter_layout.addWidget(perimeter_note)
+        perimeter_layout.addStretch()
+        perimeter_group.setFixedWidth(164)
+        colors_row.addWidget(perimeter_group)
+        colors_row.addStretch()
+        lighting_layout.addLayout(colors_row)
+        self._brightness_slider.valueChanged.connect(self._update_color_previews)
+        apply_lighting = QPushButton("Сохранить подсветку")
+        apply_lighting.setObjectName("save_lighting_button")
+        apply_lighting.clicked.connect(self._save_lighting)
+        lighting_layout.addWidget(apply_lighting)
+        layout.addWidget(lighting_group)
+        lighting_group.setVisible(hasattr(controller, "lighting_settings"))
         layout.addStretch()
 
         self._input_combo.currentIndexChanged.connect(self._set_input_device)
@@ -99,6 +161,76 @@ class SettingsDialog:
         self._show_autostart_state(actual_state)
         if hasattr(self._controller, "routing_settings"):
             self._refresh_routing_controls()
+        if hasattr(self._controller, "lighting_settings"):
+            settings = self._controller.lighting_settings()
+            self._brightness_slider.setValue(round(settings.brightness * 100))
+            for name, edit in self._color_edits.items():
+                edit.setText(getattr(settings, name).to_hex())
+            self._update_color_previews()
+
+    def _make_color_control(self, name: str) -> QWidget:
+        control = QWidget()
+        row = QHBoxLayout(control)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        edit = QLineEdit()
+        edit.setObjectName(f"lighting_{name}")
+        edit.setPlaceholderText("#RRGGBB")
+        edit.setMaxLength(7)
+        edit.setFixedWidth(92)
+        preview = QPushButton()
+        preview.setObjectName(f"lighting_preview_{name}")
+        preview.setFixedSize(32, 32)
+        preview.setToolTip("Выбрать цвет")
+        preview.setAccessibleName(f"Выбрать цвет: {COLOR_LABELS[name]}")
+        preview.clicked.connect(lambda checked=False: self._choose_color(name))
+        row.addWidget(edit)
+        row.addWidget(preview)
+        self._color_edits[name] = edit
+        self._color_previews[name] = preview
+        edit.textChanged.connect(self._update_color_previews)
+        return control
+
+    def _update_color_previews(self) -> None:
+        for name, edit in self._color_edits.items():
+            try:
+                red, green, blue = RgbColor.parse(edit.text()).to_rgb(self._brightness_slider.value() / 100)
+            except ValueError:
+                self._color_previews[name].setStyleSheet("padding: 0; min-height: 0; min-width: 0; background: transparent; border: 1px solid red;")
+            else:
+                self._color_previews[name].setStyleSheet(f"padding: 0; min-height: 0; min-width: 0; background: rgb({red}, {green}, {blue}); border: 1px solid #7585a5;")
+
+    def _choose_color(self, name: str) -> None:
+        edit = self._color_edits[name]
+        try:
+            initial = RgbColor.parse(edit.text())
+        except ValueError:
+            initial = getattr(self._controller.lighting_settings(), name)
+        selected = QColorDialog.getColor(
+            QColor(initial.red, initial.green, initial.blue),
+            self._widget,
+            COLOR_LABELS[name],
+        )
+        if selected.isValid():
+            edit.setText(selected.name(QColor.NameFormat.HexRgb).upper())
+
+    def _save_lighting(self) -> None:
+        try:
+            colors = {}
+            for name, edit in self._color_edits.items():
+                try:
+                    colors[name] = RgbColor.parse(edit.text().strip())
+                except ValueError as error:
+                    edit.setFocus()
+                    raise ValueError(f"{COLOR_LABELS[name]}: {error}") from error
+            settings = replace(
+                self._controller.lighting_settings(),
+                brightness=self._brightness_slider.value() / 100,
+                **colors,
+            )
+            self._controller.set_lighting_settings(settings)
+        except (OSError, ValueError) as error:
+            self._show_error("Подсветка панели", str(error))
 
     def set_virtual_microphone_status(self, state: AudioRoutingStatus) -> None:
         message = state.message

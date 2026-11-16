@@ -6,6 +6,7 @@ from dataclasses import replace
 from dj_poltorashka.application.autostart import WindowsAutostart
 from dj_poltorashka.audio.routing_models import AudioDeviceDescriptor
 from dj_poltorashka.audio.routing_settings import AudioRoutingSettings
+from dj_poltorashka.panel.lighting import LightingSettings, LightingSettingsRepository
 
 
 class SettingsController:
@@ -18,8 +19,14 @@ class SettingsController:
         device_registry: object | None = None,
         on_routing_change: Callable[[AudioRoutingSettings], None] | None = None,
         initial_routing_settings: AudioRoutingSettings | None = None,
+        lighting_repository: LightingSettingsRepository | None = None,
+        initial_lighting_settings: LightingSettings | None = None,
     ) -> None:
         self._autostart = autostart
+        self._lighting_repository = lighting_repository
+        self._lighting_settings = initial_lighting_settings or (
+            lighting_repository.load() if lighting_repository is not None else LightingSettings()
+        )
         self._routing_repository = routing_repository
         self._device_registry = device_registry
         self._on_routing_change = on_routing_change or (lambda settings: None)
@@ -32,6 +39,16 @@ class SettingsController:
 
     def autostart_enabled(self) -> bool:
         return self._autostart.is_enabled()
+
+    def lighting_settings(self) -> LightingSettings:
+        return self._lighting_settings
+
+    def set_lighting_settings(self, settings: LightingSettings) -> None:
+        if not isinstance(settings, LightingSettings):
+            raise ValueError("Ожидались LightingSettings")
+        if self._lighting_repository is not None:
+            self._lighting_repository.save(settings)
+        self._lighting_settings = settings
 
     def set_autostart_enabled(self, enabled: bool) -> bool:
         self._autostart.set_enabled(enabled)

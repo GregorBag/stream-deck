@@ -46,6 +46,7 @@ from dj_poltorashka.ui.dialog_service import DialogService
 from dj_poltorashka.ui.main_window import MainWindow, MainWindowCallbacks
 from dj_poltorashka.ui.panel_simulator import PanelSimulator
 from dj_poltorashka.ui.settings_dialog import SettingsDialog
+from dj_poltorashka.panel.lighting import LightingSettings, LightingSettingsRepository
 from dj_poltorashka.ui.tray_controller import TrayCallbacks, TrayController
 
 
@@ -110,6 +111,12 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
     default = create_default_stored_configuration()
     startup_errors: list[tuple[str, str]] = []
     routing_repository = AudioRoutingSettingsRepository(paths.settings_file)
+    lighting_repository = LightingSettingsRepository(paths.root / "lighting.json")
+    try:
+        lighting_settings = lighting_repository.load()
+    except (OSError, ValueError) as error:
+        lighting_settings = LightingSettings()
+        startup_errors.append(("Подсветка панели", str(error)))
     try:
         routing_settings = routing_repository.load()
     except (OSError, ValueError) as error:
@@ -245,6 +252,8 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         audio_device_registry,
         apply_routing_settings,
         routing_settings,
+        lighting_repository=lighting_repository,
+        initial_lighting_settings=lighting_settings,
     )
     settings_controller_reference.append(settings_controller)
     settings_dialog = SettingsDialog(
