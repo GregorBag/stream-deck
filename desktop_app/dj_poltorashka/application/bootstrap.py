@@ -1,7 +1,7 @@
 """Сборка и запуск настольного приложения."""
 
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import logging
 from pathlib import Path
 from collections.abc import Callable, Sequence
@@ -47,6 +47,11 @@ from dj_poltorashka.ui.main_window import MainWindow, MainWindowCallbacks
 from dj_poltorashka.ui.panel_simulator import PanelSimulator
 from dj_poltorashka.ui.settings_dialog import SettingsDialog
 from dj_poltorashka.panel.lighting import LightingSettings, LightingSettingsRepository
+from dj_poltorashka.panel.lighting_frame import build_lighting_frame
+from dj_poltorashka.panel.protocol import LedUpdate
+from dj_poltorashka.panel.events import MutePressed, PresetPressed, SoundPressed
+from dj_poltorashka.panel.transport import EMULATOR_PORT
+from dj_poltorashka.panel.worker import PanelCoordinator
 from dj_poltorashka.ui.tray_controller import TrayCallbacks, TrayController
 
 
@@ -75,6 +80,7 @@ class RunningApplication:
     sound_playback: SoundPlaybackService
     audio_routing_service: AudioRoutingService
     audio_device_registry: QtAudioDeviceRegistry
+    panel_coordinator: PanelCoordinator
     controller: AppController
     single_instance: SingleInstanceController
     draft_available: bool
@@ -85,6 +91,7 @@ class RunningApplication:
         if self._closed:
             return
         self._closed = True
+        self.panel_coordinator.close()
         self.sound_playback.close()
         self.audio_routing_service.close()
         self.audio_coordinator.close()
@@ -176,7 +183,49 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
             edit_preset_requested=lambda index: controller().edit_preset(index),
         )
     )
-    simulator = PanelSimulator(lambda event: controller().handle_panel_event(event))
+    panel_reference: list[PanelCoordinator] = []
+
+    def handle_simulator_event(event) -> None:
+        if panel_reference and panel_reference[0].selected_port == EMULATOR_PORT:
+            if isinstance(event, SoundPressed):
+                panel_reference[0].press_emulated_button(event.button_index)
+                return
+            if isinstance(event, MutePressed):
+                panel_reference[0].press_emulated_button(event.channel_index + 8)
+                return
+            if isinstance(event, PresetPressed):
+                panel_reference[0].press_emulated_button(event.preset_index + 12)
+                return
+        controller().handle_panel_event(event)
+
+    simulator = PanelSimulator(handle_simulator_event)
+    panel_status_consumers = []
+
+    def receive_panel_events(events) -> None:
+        for event in events:
+            controller().handle_panel_event(event)
+
+    def report_panel_status(status) -> None:
+        for consumer in tuple(panel_status_consumers):
+            consumer(status)
+
+    panel_coordinator = PanelCoordinator(receive_panel_events, report_panel_status)
+    panel_reference.append(panel_coordinator)
+    settings_controller_reference: list[SettingsController] = []
+    playing_buttons: set[int] = set()
+
+    def refresh_panel_lighting(stored=None) -> None:
+        if not settings_controller_reference:
+            return
+        current = settings_controller_reference[0].lighting_settings()
+        brightness = round(current.brightness * 100)
+        frame = build_lighting_frame(
+            stored or configuration_service.stored_configuration,
+            replace(current, brightness=brightness / 100),
+            connected=True,
+            playing_buttons=frozenset(playing_buttons),
+        )
+        panel_coordinator.set_lighting(LedUpdate(brightness, frame.perimeter + frame.buttons))
 
     routing_status_consumers: list[Callable[[AudioRoutingStatus], None]] = []
 
@@ -202,8 +251,18 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
             message,
         )
         simulator.set_status(f"Ошибка воспроизведения: {message}")
+        playing_buttons.discard(button_index)
+        refresh_panel_lighting()
 
-    settings_controller_reference: list[SettingsController] = []
+    def report_sound_started(index: int, path: Path) -> None:
+        simulator.set_status(f"Воспроизводится: {path.stem}")
+        playing_buttons.add(index)
+        refresh_panel_lighting()
+
+    def report_sound_finished(index: int) -> None:
+        simulator.set_status("Воспроизведение завершено")
+        playing_buttons.discard(index)
+        refresh_panel_lighting()
 
     def current_mix_gains() -> tuple[float, float]:
         current = settings_controller_reference[0].routing_settings()
@@ -218,10 +277,8 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
     )
     sound_playback = SoundPlaybackService(
         sound_player_factory,
-        lambda index, path: simulator.set_status(
-            f"Воспроизводится: {path.stem}"
-        ),
-        lambda index: simulator.set_status("Воспроизведение завершено"),
+        report_sound_started,
+        report_sound_finished,
         report_sound_error,
     )
     dialogs = DialogService(main_window.widget)
@@ -254,6 +311,8 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         routing_settings,
         lighting_repository=lighting_repository,
         initial_lighting_settings=lighting_settings,
+        panel_coordinator=panel_coordinator,
+        on_lighting_change=lambda settings: refresh_panel_lighting(),
     )
     settings_controller_reference.append(settings_controller)
     settings_dialog = SettingsDialog(
@@ -261,6 +320,8 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         dialogs.show_error,
         main_window.widget,
     )
+    panel_status_consumers.append(settings_dialog.set_panel_connection_status)
+    panel_coordinator.on_ports_changed = settings_dialog.refresh_panel_ports
     main_window.add_panel_pages(
         simulator.widget,
         settings_dialog.widget,
@@ -294,8 +355,10 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         audio_coordinator=audio_coordinator,
         sound_playback=sound_playback,
         quit_application=application.quit,
+        on_configuration_change=refresh_panel_lighting,
     )
     controller_reference.append(app_controller)
+    refresh_panel_lighting()
 
     return RunningApplication(
         application=application,
@@ -312,6 +375,7 @@ def build_application(data_root: Path | None = None) -> RunningApplication:
         sound_playback=sound_playback,
         audio_routing_service=audio_routing_service,
         audio_device_registry=audio_device_registry,
+        panel_coordinator=panel_coordinator,
         controller=app_controller,
         single_instance=SingleInstanceController(),
         draft_available=draft_available,

@@ -34,6 +34,7 @@ class AppController:
         audio_coordinator,
         sound_playback,
         quit_application,
+        on_configuration_change=None,
     ):
         self._configuration_service = configuration_service
         self._editor = editor
@@ -46,6 +47,7 @@ class AppController:
         self._audio_coordinator = audio_coordinator
         self._sound_playback = sound_playback
         self._quit_application = quit_application
+        self._on_configuration_change = on_configuration_change or (lambda stored: None)
         self._audio_states: dict[int, ChannelAudioUpdate] = {}
         self._audio_revision = 0
         self._event_router = PanelEventRouter(
@@ -406,6 +408,7 @@ class AppController:
         )
         self._main_window.render(stored, audio_states)
         self._simulator.render(stored.active)
+        self._on_configuration_change(stored)
 
     def _finish_exit(self) -> None:
         self._tray.hide()

@@ -244,3 +244,34 @@ def test_failed_lighting_save_preserves_controller_state_and_input(qtbot, tmp_pa
     assert controller.lighting_settings() == LightingSettings()
     assert edit.text() == "#123456"
     assert len(errors) == 1
+
+
+
+def test_port_refresh_preserves_pending_color_input_and_missing_selection(qtbot, tmp_path):
+    from types import SimpleNamespace
+    from PySide6.QtWidgets import QLineEdit, QPushButton
+    from dj_poltorashka.application.settings_controller import SettingsController
+    from dj_poltorashka.panel.connection import PanelConnectionStatus
+    from dj_poltorashka.panel.transport import PanelPort
+    selected = []
+    panel = SimpleNamespace(
+        ports=(PanelPort("COM3", "USB"),), selected_port=None,
+        status=PanelConnectionStatus(), select_port=selected.append,
+        refresh_ports=lambda: None,
+    )
+    controller = SettingsController(SimpleNamespace(is_enabled=lambda: False), panel_coordinator=panel)
+    dialog = SettingsDialog(controller, lambda *args: None)
+    qtbot.addWidget(dialog.widget)
+    dialog.open()
+    combo = dialog.widget.findChild(QComboBox, "panel_port_combo")
+    combo.setCurrentIndex(combo.findData("COM3"))
+    edit = dialog.widget.findChild(QLineEdit, "lighting_perimeter")
+    edit.setText("#123456")
+    panel.ports = ()
+    dialog.refresh_panel_ports()
+    assert combo.currentData() == "COM3"
+    assert "Недоступен" in combo.currentText()
+    assert edit.text() == "#123456"
+    assert selected == []
+    dialog.widget.findChild(QPushButton, "connect_panel_button").click()
+    assert selected == ["COM3"]

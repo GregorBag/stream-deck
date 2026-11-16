@@ -2,11 +2,17 @@
 
 from collections.abc import Callable
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from dj_poltorashka.application.autostart import WindowsAutostart
 from dj_poltorashka.audio.routing_models import AudioDeviceDescriptor
 from dj_poltorashka.audio.routing_settings import AudioRoutingSettings
 from dj_poltorashka.panel.lighting import LightingSettings, LightingSettingsRepository
+from dj_poltorashka.panel.connection import PanelConnectionStatus
+
+if TYPE_CHECKING:
+    from dj_poltorashka.panel.worker import PanelCoordinator
+    from dj_poltorashka.panel.transport import PanelPort
 
 
 class SettingsController:
@@ -21,8 +27,12 @@ class SettingsController:
         initial_routing_settings: AudioRoutingSettings | None = None,
         lighting_repository: LightingSettingsRepository | None = None,
         initial_lighting_settings: LightingSettings | None = None,
+        panel_coordinator: "PanelCoordinator | None" = None,
+        on_lighting_change: Callable[[LightingSettings], None] | None = None,
     ) -> None:
         self._autostart = autostart
+        self._panel_coordinator = panel_coordinator
+        self._on_lighting_change = on_lighting_change or (lambda settings: None)
         self._lighting_repository = lighting_repository
         self._lighting_settings = initial_lighting_settings or (
             lighting_repository.load() if lighting_repository is not None else LightingSettings()
@@ -49,6 +59,24 @@ class SettingsController:
         if self._lighting_repository is not None:
             self._lighting_repository.save(settings)
         self._lighting_settings = settings
+        self._on_lighting_change(settings)
+
+    def panel_ports(self) -> tuple["PanelPort", ...]:
+        return self._panel_coordinator.ports if self._panel_coordinator else ()
+
+    def selected_panel_port(self) -> str | None:
+        return self._panel_coordinator.selected_port if self._panel_coordinator else None
+
+    def panel_status(self) -> PanelConnectionStatus:
+        return self._panel_coordinator.status if self._panel_coordinator else PanelConnectionStatus()
+
+    def select_panel_port(self, name: str | None) -> None:
+        if self._panel_coordinator:
+            self._panel_coordinator.select_port(name)
+
+    def refresh_panel_ports(self) -> None:
+        if self._panel_coordinator:
+            self._panel_coordinator.refresh_ports()
 
     def set_autostart_enabled(self, enabled: bool) -> bool:
         self._autostart.set_enabled(enabled)

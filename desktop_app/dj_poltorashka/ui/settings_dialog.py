@@ -29,6 +29,7 @@ from dj_poltorashka.audio.routing_models import (
 )
 from dj_poltorashka.audio.routing_settings import AudioRoutingSettings
 from dj_poltorashka.panel.lighting import COLOR_LABELS, RgbColor
+from dj_poltorashka.panel.connection import PanelConnectionStatus
 
 
 class SettingsDialog:
@@ -53,6 +54,37 @@ class SettingsDialog:
         self._autostart_checkbox.setObjectName("autostart_checkbox")
         layout.addWidget(self._autostart_checkbox)
         self._autostart_checkbox.toggled.connect(self._set_autostart)
+
+        panel_group = QGroupBox("Подключение панели")
+        panel_group.setObjectName("panel_connection_group")
+        panel_layout = QFormLayout(panel_group)
+        port_control = QWidget()
+        port_row = QHBoxLayout(port_control)
+        port_row.setContentsMargins(0, 0, 0, 0)
+        self._panel_port_combo = QComboBox()
+        self._panel_port_combo.setObjectName("panel_port_combo")
+        self._panel_port_combo.addItem("Не выбран", None)
+        refresh_ports = QPushButton("Обновить")
+        refresh_ports.setObjectName("refresh_panel_ports_button")
+        refresh_ports.clicked.connect(self._refresh_panel_ports)
+        self._panel_connect = QPushButton("Подключить")
+        self._panel_connect.setObjectName("connect_panel_button")
+        self._panel_connect.clicked.connect(self._connect_panel)
+        self._panel_disconnect = QPushButton("Отключить")
+        self._panel_disconnect.setObjectName("disconnect_panel_button")
+        self._panel_disconnect.clicked.connect(lambda: self._controller.select_panel_port(None))
+        self._panel_disconnect.setEnabled(False)
+        self._panel_connection_status = QLabel("Панель не подключена")
+        self._panel_connection_status.setObjectName("panel_connection_status")
+        self._panel_connection_status.setWordWrap(True)
+        port_row.addWidget(self._panel_port_combo, 1)
+        port_row.addWidget(refresh_ports)
+        port_row.addWidget(self._panel_connect)
+        port_row.addWidget(self._panel_disconnect)
+        panel_layout.addRow("Порт", port_control)
+        panel_layout.addRow("Состояние", self._panel_connection_status)
+        layout.addWidget(panel_group)
+        panel_group.setVisible(hasattr(controller, "panel_ports"))
 
         group = QGroupBox("Виртуальный микрофон")
         group.setObjectName("virtual_microphone_group")
@@ -161,12 +193,42 @@ class SettingsDialog:
         self._show_autostart_state(actual_state)
         if hasattr(self._controller, "routing_settings"):
             self._refresh_routing_controls()
+        if hasattr(self._controller, "panel_ports"):
+            self.refresh_panel_ports(preserve_selection=False)
+            self._controller.refresh_panel_ports()
         if hasattr(self._controller, "lighting_settings"):
             settings = self._controller.lighting_settings()
             self._brightness_slider.setValue(round(settings.brightness * 100))
             for name, edit in self._color_edits.items():
                 edit.setText(getattr(settings, name).to_hex())
             self._update_color_previews()
+
+    def refresh_panel_ports(self, *, preserve_selection: bool = True) -> None:
+        selected = self._panel_port_combo.currentData() if preserve_selection else self._controller.selected_panel_port()
+        blocker = QSignalBlocker(self._panel_port_combo)
+        self._panel_port_combo.clear()
+        self._panel_port_combo.addItem("Не выбран", None)
+        for port in self._controller.panel_ports():
+            text = port.description if port.name.startswith("emulator://") else f"{port.name} — {port.description}"
+            self._panel_port_combo.addItem(text, port.name)
+        index = self._panel_port_combo.findData(selected)
+        if selected is not None and index < 0:
+            self._panel_port_combo.addItem(f"Недоступен — {selected}", selected)
+            index = self._panel_port_combo.count() - 1
+        self._panel_port_combo.setCurrentIndex(max(0, index))
+        del blocker
+        self.set_panel_connection_status(self._controller.panel_status())
+
+    def set_panel_connection_status(self, status: PanelConnectionStatus) -> None:
+        self._panel_connection_status.setText(status.message)
+        self._panel_connection_status.setProperty("status_code", status.code)
+        self._panel_disconnect.setEnabled(status.port_name is not None)
+
+    def _refresh_panel_ports(self) -> None:
+        self._controller.refresh_panel_ports()
+
+    def _connect_panel(self) -> None:
+        self._controller.select_panel_port(self._panel_port_combo.currentData())
 
     def _make_color_control(self, name: str) -> QWidget:
         control = QWidget()
