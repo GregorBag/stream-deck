@@ -177,8 +177,8 @@ def test_sound_button_requires_id_and_display_name_together(
         SoundButtonConfig(sound_id=sound_id, display_name=display_name)
 
 
-@pytest.mark.parametrize("preset_count", (2, 4))
-def test_stored_configuration_requires_three_preset_slots(preset_count: int) -> None:
+@pytest.mark.parametrize("preset_count", (2, 3, 5))
+def test_stored_configuration_requires_four_preset_slots(preset_count: int) -> None:
     panel = make_panel()
 
     with pytest.raises(ValueError):

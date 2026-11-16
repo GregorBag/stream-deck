@@ -119,7 +119,7 @@ def make_stored_configuration() -> StoredConfiguration:
     return StoredConfiguration(
         active=panel,
         baseline=panel,
-        presets=(PresetConfig("Работа", panel), None, None),
+        presets=(PresetConfig("Работа", panel), None, None, None),
     )
 
 

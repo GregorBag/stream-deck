@@ -42,7 +42,7 @@ def make_router(recorder: EventRecorder) -> PanelEventRouter:
         (SliderChanged(2, 0.75), ("set_volume", 2, 0.75)),
         (MutePressed(1), ("toggle_mute", 1)),
         (SoundPressed(6), ("press_sound", 6)),
-        (PresetPressed(2), ("load_preset", 2)),
+        (PresetPressed(3), ("load_preset", 3)),
     ),
 )
 def test_route_dispatches_event_to_matching_operation(

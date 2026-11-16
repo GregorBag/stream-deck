@@ -22,5 +22,5 @@ def create_default_stored_configuration() -> StoredConfiguration:
     return StoredConfiguration(
         active=panel,
         baseline=panel,
-        presets=(None, None, None),
+        presets=(None, None, None, None),
     )

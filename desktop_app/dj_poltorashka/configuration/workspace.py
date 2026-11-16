@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from dj_poltorashka.configuration.models import (
     PanelConfiguration,
     PresetConfig,
+    PRESET_COUNT,
     StoredConfiguration,
 )
 
@@ -97,6 +98,6 @@ class ConfigurationWorkspace:
 
     @staticmethod
     def _preset_index(slot: int) -> int:
-        if isinstance(slot, bool) or not isinstance(slot, int) or not 1 <= slot <= 3:
-            raise IndexError("Номер слота пресета должен быть от 1 до 3")
+        if isinstance(slot, bool) or not isinstance(slot, int) or not 1 <= slot <= PRESET_COUNT:
+            raise IndexError("Номер слота пресета должен быть от 1 до 4")
         return slot - 1

@@ -12,7 +12,7 @@ from dj_poltorashka.configuration.models import (
 )
 
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _CHANNEL_KINDS = ("unassigned", "master", "application", "microphone")
 
 
@@ -66,9 +66,9 @@ def encode_stored_configuration(stored: StoredConfiguration) -> dict[str, object
 def decode_stored_configuration(data: object) -> StoredConfiguration:
     root = _require_mapping(data, "root")
     schema_version = _required(root, "schema_version", "")
-    if isinstance(schema_version, bool) or schema_version != _SCHEMA_VERSION:
+    if isinstance(schema_version, bool) or schema_version not in (1, _SCHEMA_VERSION):
         raise ValueError(
-            f"schema_version: поддерживается только версия {_SCHEMA_VERSION}"
+            f"schema_version: поддерживаются версии 1 и {_SCHEMA_VERSION}"
         )
 
     active = _decode_panel_configuration(_required(root, "active", ""), "active")
@@ -77,6 +77,10 @@ def decode_stored_configuration(data: object) -> StoredConfiguration:
         "baseline",
     )
     preset_values = _require_list(_required(root, "presets", ""), "presets")
+    if schema_version == 1:
+        if len(preset_values) != 3:
+            raise ValueError("presets: версия 1 должна содержать три слота пресетов")
+        preset_values = [*preset_values, None]
     presets: list[PresetConfig | None] = []
     for index, preset_value in enumerate(preset_values):
         preset_path = f"presets[{index}]"

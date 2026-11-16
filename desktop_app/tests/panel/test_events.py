@@ -48,7 +48,7 @@ def test_sound_event_rejects_invalid_index(button_index: object) -> None:
         SoundPressed(button_index)
 
 
-@pytest.mark.parametrize("preset_index", (-1, 3, True, 1.5))
+@pytest.mark.parametrize("preset_index", (-1, 4, True, 1.5))
 def test_preset_event_rejects_invalid_index(preset_index: object) -> None:
     with pytest.raises(IndexError):
         PresetPressed(preset_index)
@@ -60,7 +60,7 @@ def test_button_events_accept_boundary_indexes() -> None:
     assert SoundPressed(0).button_index == 0
     assert SoundPressed(7).button_index == 7
     assert PresetPressed(0).preset_index == 0
-    assert PresetPressed(2).preset_index == 2
+    assert PresetPressed(3).preset_index == 3
 
 
 @pytest.mark.parametrize("is_paused", (0, 1, None, "yes"))

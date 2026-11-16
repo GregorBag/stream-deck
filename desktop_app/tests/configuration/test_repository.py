@@ -33,7 +33,7 @@ def make_stored_configuration(volume: float) -> StoredConfiguration:
     return StoredConfiguration(
         active=panel,
         baseline=panel,
-        presets=(None, None, None),
+        presets=(None, None, None, None),
     )
 
 
@@ -136,3 +136,29 @@ def test_successful_save_leaves_no_temporary_file(tmp_path: Path) -> None:
     repository.save(make_stored_configuration(0.6))
 
     assert not tuple(tmp_path.glob("*.tmp"))
+
+
+def test_legacy_file_migrates_and_persists_fourth_preset(tmp_path: Path) -> None:
+    import json
+    from dataclasses import replace
+    from dj_poltorashka.configuration.codec import encode_stored_configuration
+    from dj_poltorashka.configuration.models import PresetConfig
+
+    stored = make_stored_configuration(0.7)
+    first = PresetConfig("Первый", stored.active)
+    stored = replace(stored, presets=(first, None, first, None))
+    legacy = encode_stored_configuration(stored)
+    legacy["schema_version"] = 1
+    legacy["presets"] = legacy["presets"][:3]
+    paths = ConfigurationPaths.under(tmp_path)
+    paths.configuration_file.write_text(json.dumps(legacy), encoding="utf-8")
+    repository = make_repository(tmp_path)
+
+    loaded = repository.load(make_stored_configuration(0.1))
+    assert loaded == stored
+    assert json.loads(paths.configuration_file.read_text(encoding="utf-8")) == legacy
+    fourth = PresetConfig("Четвёртый", make_panel(0.3))
+    changed = replace(loaded, presets=(*loaded.presets[:3], fourth))
+    repository.save(changed)
+    assert make_repository(tmp_path).load(stored) == changed
+    assert json.loads(paths.configuration_file.read_text(encoding="utf-8"))["schema_version"] == 2

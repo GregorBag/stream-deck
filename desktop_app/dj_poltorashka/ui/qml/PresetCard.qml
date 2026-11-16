@@ -24,9 +24,10 @@ Rectangle {
         Text { objectName: "preset_summary_" + card.preset_index; Layout.fillWidth: true; text: card.preset ? card.preset.summary : "Нет сохранённой настройки"; color: "#96a8ca"; font.pixelSize: 11; wrapMode: Text.WordWrap }
         Item { Layout.fillHeight: true }
         RowLayout {
+            Layout.fillWidth: true
             spacing: 7
-            NeonButton { objectName: "preset_load_" + card.preset_index; text: "Загрузить"; icon_url: card.page.icons.download || ""; primary: true; accent: "#39d9f4"; enabled: card.preset ? card.preset.assigned : false; onClicked: card.page.load_preset_requested(card.preset_index) }
-            NeonButton { objectName: "preset_edit_" + card.preset_index; text: "Редактировать"; icon_url: card.page.icons.edit || ""; enabled: card.preset ? card.preset.assigned : false; onClicked: card.page.edit_preset_requested(card.preset_index) }
+            NeonButton { objectName: "preset_load_" + card.preset_index; Layout.fillWidth: true; Layout.minimumWidth: 0; text: "Загрузить"; icon_url: card.page.icons.download || ""; primary: true; accent: "#39d9f4"; enabled: card.preset ? card.preset.assigned : false; onClicked: card.page.load_preset_requested(card.preset_index) }
+            NeonButton { objectName: "preset_edit_" + card.preset_index; text: ""; tooltip: "Редактировать"; icon_url: card.page.icons.edit || ""; enabled: card.preset ? card.preset.assigned : false; onClicked: card.page.edit_preset_requested(card.preset_index) }
         }
     }
 }

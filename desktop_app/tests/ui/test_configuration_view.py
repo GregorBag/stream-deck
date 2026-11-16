@@ -28,7 +28,7 @@ def test_render_does_not_emit_commands(qtbot):
     root = view.widget.rootObject()
     assert len(value(root, "channels")) == 4
     assert len(value(root, "sounds")) == 8
-    assert len(value(root, "presets")) == 3
+    assert len(value(root, "presets")) == 4
     assert find_item(root, "volume_slider_1").property("value") == 65
     assert find_item(root, "channel_name_2").property("text") == "Player"
     assert value(root, "channels")[1]["muted"]
@@ -220,3 +220,21 @@ def test_fader_mouse_reaches_endpoints(qtbot, at_top, expected):
     qtbot.mouseClick(view.widget, Qt.LeftButton, pos=point)
     assert slider.property("value") == expected
     assert recorder.calls == [("volume", 1, expected / 100)]
+
+
+@pytest.mark.parametrize("action", ("load", "edit"))
+def test_fourth_preset_action_is_reachable(qtbot, action):
+    from dj_poltorashka.configuration.models import PresetConfig
+    view, recorder = make_view(qtbot)
+    stored = make_stored_configuration()
+    view.render(replace(stored, presets=(*stored.presets[:3], PresetConfig("Четвёртый", stored.active))))
+    qtbot.wait(40)
+    root = view.widget.rootObject()
+    assert find_item(root, "preset_name_3").property("text") == "Четвёртый"
+    button = find_item(root, f"preset_{action}_3")
+    root.reveal_item(button)
+    qtbot.wait(40)
+    point = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+    assert 0 <= point.y() < view.widget.height()
+    click_item(qtbot, view.widget, button)
+    assert recorder.calls == [(f"{action}_preset", 3)]

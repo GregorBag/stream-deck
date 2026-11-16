@@ -28,7 +28,7 @@ def stored_with_first_preset() -> StoredConfiguration:
     return StoredConfiguration(
         active=stored.active,
         baseline=stored.baseline,
-        presets=(PresetConfig("Работа", stored.active), None, None),
+        presets=(PresetConfig("Работа", stored.active), None, None, None),
     )
 
 
@@ -76,12 +76,12 @@ def test_preset_dialog_returns_zero_based_slot_and_trimmed_name(
     slot = dialog.widget.findChild(QComboBox, "preset_slot")
     name = dialog.widget.findChild(QLineEdit, "preset_name")
     buttons = dialog.widget.findChild(QDialogButtonBox, "preset_buttons")
-    slot.setCurrentIndex(1)
+    slot.setCurrentIndex(3)
     name.setText("  Игры  ")
 
     qtbot.mouseClick(buttons.button(QDialogButtonBox.Save), Qt.LeftButton)
 
-    assert dialog.selection() == (1, "Игры")
+    assert dialog.selection() == (3, "Игры")
 
 
 def test_rejected_preset_dialog_has_no_selection(qtbot: QtBot) -> None:

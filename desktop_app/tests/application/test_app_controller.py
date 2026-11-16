@@ -304,7 +304,7 @@ def test_load_preset_uses_zero_based_index_and_refreshes_views(tmp_path: Path) -
     stored = StoredConfiguration(
         active=initial.active,
         baseline=initial.baseline,
-        presets=(None, PresetConfig("Игры", preset_panel), None),
+        presets=(None, PresetConfig("Игры", preset_panel), None, None),
     )
     context = ControllerContext(tmp_path, stored)
 
@@ -319,7 +319,7 @@ def test_edit_preset_changes_only_selected_slot_without_audio_or_draft(tmp_path:
     initial = create_default_stored_configuration()
     active = PanelConfigurationEditor.set_volume(initial.active, 0, 0.8)
     old = PresetConfig("Работа", initial.active)
-    stored = StoredConfiguration(active, initial.baseline, (old, None, None))
+    stored = StoredConfiguration(active, initial.baseline, (old, None, None, None))
     context = ControllerContext(tmp_path, stored)
     context.repository.draft = active
     edited_panel = PanelConfigurationEditor.set_volume(initial.active, 0, 0.2)
@@ -340,7 +340,7 @@ def test_edit_preset_changes_only_selected_slot_without_audio_or_draft(tmp_path:
 
 def test_cancelled_preset_edit_changes_nothing(tmp_path: Path) -> None:
     initial = create_default_stored_configuration()
-    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None, None))
     context = ControllerContext(tmp_path, stored)
 
     context.controller.edit_preset(0)
@@ -352,7 +352,7 @@ def test_cancelled_preset_edit_changes_nothing(tmp_path: Path) -> None:
 
 def test_replaced_sound_imports_only_final_source(tmp_path: Path) -> None:
     initial = create_default_stored_configuration()
-    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None, None))
     context = ControllerContext(tmp_path, stored)
     final_source = tmp_path / "final.mp3"
     final_source.write_bytes(b"final")
@@ -368,7 +368,7 @@ def test_replaced_sound_imports_only_final_source(tmp_path: Path) -> None:
 
 def test_save_failure_removes_new_sound_and_preserves_state(tmp_path: Path) -> None:
     initial = create_default_stored_configuration()
-    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None, None))
     context = ControllerContext(tmp_path, stored)
     source = tmp_path / "new.mp3"
     source.write_bytes(b"audio")
@@ -384,7 +384,7 @@ def test_save_failure_removes_new_sound_and_preserves_state(tmp_path: Path) -> N
 
 def test_second_sound_import_failure_removes_first_import(tmp_path: Path) -> None:
     initial = create_default_stored_configuration()
-    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None))
+    stored = StoredConfiguration(initial.active, initial.baseline, (PresetConfig("Работа", initial.active), None, None, None))
     context = ControllerContext(tmp_path, stored)
     first = tmp_path / "first.mp3"
     first.write_bytes(b"audio")
@@ -632,14 +632,14 @@ def test_panel_events_route_to_configuration_and_sound_status(tmp_path: Path) ->
     stored = StoredConfiguration(
         active=initial.active,
         baseline=initial.baseline,
-        presets=(PresetConfig("Работа", preset_panel), None, None),
+        presets=(None, None, None, PresetConfig("Работа", preset_panel)),
     )
     context = ControllerContext(tmp_path, stored)
 
     context.controller.handle_panel_event(SliderChanged(0, 0.7))
     context.controller.handle_panel_event(MutePressed(0))
     context.controller.handle_panel_event(SoundPressed(3))
-    context.controller.handle_panel_event(PresetPressed(0))
+    context.controller.handle_panel_event(PresetPressed(3))
 
     assert context.service.stored_configuration.active == preset_panel
     assert context.simulator.statuses == ["Кнопка 4 не настроена"]
@@ -701,7 +701,7 @@ def test_saving_to_occupied_preset_requires_confirmation(tmp_path: Path) -> None
     stored = StoredConfiguration(
         active=initial.active,
         baseline=initial.baseline,
-        presets=(occupied, None, None),
+        presets=(occupied, None, None, None),
     )
     context = ControllerContext(tmp_path, stored)
     context.dialogs.preset_selection = (0, "Новый")

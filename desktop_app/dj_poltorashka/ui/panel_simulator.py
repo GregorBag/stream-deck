@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dj_poltorashka.configuration.models import PanelConfiguration
+from dj_poltorashka.configuration.models import PRESET_COUNT, PanelConfiguration
 from dj_poltorashka.panel.events import (
     MutePressed,
     PanelEvent,
@@ -134,7 +134,7 @@ class PanelSimulator:
         presets_layout = QHBoxLayout(presets_container)
         presets_layout.setContentsMargins(0, 0, 0, 0)
         self._preset_buttons: list[QPushButton] = []
-        for index in range(3):
+        for index in range(PRESET_COUNT):
             button = QPushButton(f"Пресет {index + 1}")
             button.setObjectName(f"simulator_preset_{index}")
             button.setIcon(make_icon("download", size=18))

@@ -50,7 +50,7 @@ Rectangle {
         anchors.fill: parent
         clip: true
         contentWidth: Math.max(1050, availableWidth)
-        contentHeight: Math.max(660, availableHeight)
+        contentHeight: Math.max(660, presets_column.implicitHeight + 36, availableHeight)
         ScrollBar.horizontal.policy: contentWidth > availableWidth ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
         ScrollBar.vertical.policy: contentHeight > availableHeight ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
         Item {
@@ -110,10 +110,11 @@ Rectangle {
                     Layout.fillHeight: true
                     radius: 8; color: "#0c1225"; border.color: "#2c3859"
                     ColumnLayout {
+                        id: presets_column
                         anchors.fill: parent; anchors.margins: 12; spacing: 12
                         Text { text: "Пресеты"; color: "#e9eaff"; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.bottomMargin: 3 }
                         Repeater {
-                            model: 3
+                            model: screen.presets.length
                             PresetCard {
                                 required property int index
                                 preset_index: index

@@ -44,7 +44,7 @@ def make_stored_configuration() -> StoredConfiguration:
     return StoredConfiguration(
         active=active,
         baseline=baseline,
-        presets=(PresetConfig("Основной", baseline), None, PresetConfig("Игры", active)),
+        presets=(PresetConfig("Основной", baseline), None, PresetConfig("Игры", active), PresetConfig("Четвёртый", active)),
     )
 
 
@@ -54,7 +54,7 @@ def test_stored_configuration_round_trip_preserves_all_fields() -> None:
     encoded = encode_stored_configuration(stored)
     decoded = decode_stored_configuration(encoded)
 
-    assert encoded["schema_version"] == 1
+    assert encoded["schema_version"] == 2
     assert decoded == stored
 
 
@@ -67,7 +67,7 @@ def test_panel_configuration_round_trip_preserves_all_fields() -> None:
     assert decoded == panel
 
 
-def test_unassigned_channel_round_trip_keeps_schema_version_one() -> None:
+def test_unassigned_channel_round_trip_keeps_schema_version_two() -> None:
     panel = PanelConfiguration(
         channels=(
             MixerChannelConfig("master", 1.0, False),
@@ -80,18 +80,18 @@ def test_unassigned_channel_round_trip_keeps_schema_version_one() -> None:
     stored = StoredConfiguration(
         active=panel,
         baseline=panel,
-        presets=(None, None, None),
+        presets=(None, None, None, None),
     )
 
     encoded = encode_stored_configuration(stored)
 
-    assert encoded["schema_version"] == 1
+    assert encoded["schema_version"] == 2
     assert decode_stored_configuration(encoded) == stored
 
 
 def test_decoder_rejects_unknown_schema_version() -> None:
     encoded = encode_stored_configuration(make_stored_configuration())
-    encoded["schema_version"] = 2
+    encoded["schema_version"] = 3
 
     with pytest.raises(ValueError, match="schema_version"):
         decode_stored_configuration(encoded)
@@ -144,3 +144,30 @@ def test_decode_rejects_configuration_with_duplicate_targets() -> None:
 
     with pytest.raises(ValueError, match=r"panel: Общая громкость"):
         decode_panel_configuration(encoded)
+
+
+@pytest.mark.parametrize("occupied", (False, True))
+def test_legacy_configuration_adds_empty_fourth_slot_without_changing_data(occupied):
+    encoded = encode_stored_configuration(make_stored_configuration())
+    encoded["schema_version"] = 1
+    encoded["presets"] = encoded["presets"][:3] if occupied else [None] * 3
+    original = copy.deepcopy(encoded)
+
+    migrated = decode_stored_configuration(encoded)
+    saved = encode_stored_configuration(migrated)
+
+    assert encoded == original
+    assert saved["schema_version"] == 2
+    assert saved["active"] == original["active"]
+    assert saved["baseline"] == original["baseline"]
+    assert saved["presets"] == [*original["presets"], None]
+    assert decode_stored_configuration(saved) == migrated
+
+
+@pytest.mark.parametrize("version, count", [(1, 2), (1, 4), (2, 3), (2, 5)])
+def test_decoder_rejects_wrong_slot_count_for_schema_version(version, count):
+    encoded = encode_stored_configuration(make_stored_configuration())
+    encoded["schema_version"] = version
+    encoded["presets"] = [None] * count
+    with pytest.raises(ValueError):
+        decode_stored_configuration(encoded)

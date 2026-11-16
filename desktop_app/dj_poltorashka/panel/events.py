@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 import math
 
+from dj_poltorashka.configuration.models import PRESET_COUNT
+
 
 def _require_index(index: int, item_count: int) -> None:
     if isinstance(index, bool) or not isinstance(index, int):
@@ -46,7 +48,7 @@ class PresetPressed:
     preset_index: int
 
     def __post_init__(self) -> None:
-        _require_index(self.preset_index, 3)
+        _require_index(self.preset_index, PRESET_COUNT)
 
 
 @dataclass(frozen=True)

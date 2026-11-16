@@ -55,7 +55,7 @@ def test_simulator_builds_all_physical_controls(qtbot: QtBot) -> None:
     assert len(widgets_with_prefix(simulator.widget, "simulator_slider_")) == 4
     assert len(widgets_with_prefix(simulator.widget, "simulator_mute_")) == 4
     assert len(widgets_with_prefix(simulator.widget, "simulator_sound_")) == 8
-    assert len(widgets_with_prefix(simulator.widget, "simulator_preset_")) == 3
+    assert len(widgets_with_prefix(simulator.widget, "simulator_preset_")) == 4
     assert simulator.widget.findChild(QCheckBox, "simulator_pause") is not None
 
 
@@ -92,7 +92,7 @@ def test_controls_emit_zero_based_panel_events(qtbot: QtBot) -> None:
         Qt.LeftButton,
     )
     qtbot.mouseClick(
-        simulator.widget.findChild(QPushButton, "simulator_preset_2"),
+        simulator.widget.findChild(QPushButton, "simulator_preset_3"),
         Qt.LeftButton,
     )
 
@@ -100,7 +100,7 @@ def test_controls_emit_zero_based_panel_events(qtbot: QtBot) -> None:
         SliderChanged(0, 0.25),
         MutePressed(0),
         SoundPressed(0),
-        PresetPressed(2),
+        PresetPressed(3),
     ]
     assert "Кнопка 1" in simulator.widget.findChild(
         QLabel,

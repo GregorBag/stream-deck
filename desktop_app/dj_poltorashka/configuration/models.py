@@ -12,7 +12,7 @@ ChannelKind = Literal["unassigned", "master", "application", "microphone"]
 _CHANNEL_KINDS = ("unassigned", "master", "application", "microphone")
 _CHANNEL_COUNT = 4
 _SOUND_BUTTON_COUNT = 8
-_PRESET_COUNT = 3
+PRESET_COUNT = 4
 
 
 def _require_unique_audio_targets(
@@ -143,7 +143,7 @@ class PresetConfig:
 
 @dataclass(frozen=True)
 class StoredConfiguration:
-    """Активная конфигурация, база сравнения и три слота пресетов."""
+    """Активная конфигурация, база сравнения и четыре слота пресетов."""
 
     active: PanelConfiguration
     baseline: PanelConfiguration
@@ -155,8 +155,8 @@ class StoredConfiguration:
             raise ValueError("Активная настройка должна быть конфигурацией панели")
         if not isinstance(self.baseline, PanelConfiguration):
             raise ValueError("Базовая настройка должна быть конфигурацией панели")
-        if len(presets) != _PRESET_COUNT:
-            raise ValueError("Хранилище должно содержать три слота пресетов")
+        if len(presets) != PRESET_COUNT:
+            raise ValueError("Хранилище должно содержать четыре слота пресетов")
         if not all(preset is None or isinstance(preset, PresetConfig) for preset in presets):
             raise ValueError("Слот должен быть пустым или содержать PresetConfig")
         object.__setattr__(self, "presets", presets)

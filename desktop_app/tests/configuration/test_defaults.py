@@ -8,7 +8,7 @@ def test_default_configuration_has_expected_channels_buttons_and_presets() -> No
     stored = create_default_stored_configuration()
 
     assert stored.active == stored.baseline
-    assert stored.presets == (None, None, None)
+    assert stored.presets == (None, None, None, None)
     assert stored.active.channels[0].channel_kind == "master"
     assert stored.active.channels[0].volume == 1.0
     assert stored.active.channels[0].muted is False

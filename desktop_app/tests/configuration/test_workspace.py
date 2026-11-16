@@ -35,7 +35,7 @@ def make_stored_configuration(
     return StoredConfiguration(
         active=active or default_panel,
         baseline=baseline or default_panel,
-        presets=(first_preset, None, None),
+        presets=(first_preset, None, None, None),
     )
 
 
@@ -129,7 +129,7 @@ def test_restoring_draft_returns_new_dirty_workspace() -> None:
     assert not workspace.is_dirty
 
 
-def test_preset_slot_outside_one_to_three_changes_nothing() -> None:
+def test_preset_slot_outside_one_to_four_changes_nothing() -> None:
     panel = make_panel(0.5)
     workspace = ConfigurationWorkspace(
         make_stored_configuration(
@@ -140,7 +140,7 @@ def test_preset_slot_outside_one_to_three_changes_nothing() -> None:
     )
     snapshot = workspace.stored_configuration
 
-    for slot in (0, 4):
+    for slot in (0, 5):
         with pytest.raises(IndexError):
             workspace.with_saved_preset(slot, "Недопустимый")
         with pytest.raises(IndexError):
@@ -167,7 +167,7 @@ def test_replacing_preset_preserves_active_baseline_and_other_slots() -> None:
 
     assert changed.stored_configuration.active == active
     assert changed.stored_configuration.baseline == baseline
-    assert changed.stored_configuration.presets == (replacement, None, None)
+    assert changed.stored_configuration.presets == (replacement, None, None, None)
     assert changed.is_dirty
     assert workspace.stored_configuration.presets[0] == old
 
@@ -179,6 +179,6 @@ def test_replacing_empty_or_invalid_slot_fails() -> None:
 
     with pytest.raises(LookupError):
         workspace.with_replaced_preset(2, replacement)
-    for slot in (0, 4):
+    for slot in (0, 5):
         with pytest.raises(IndexError):
             workspace.with_replaced_preset(slot, replacement)

@@ -80,7 +80,7 @@ def make_stored_configuration(
     return StoredConfiguration(
         active=active,
         baseline=baseline,
-        presets=(first_preset, None, None),
+        presets=(first_preset, None, None, None),
     )
 
 
@@ -313,3 +313,23 @@ def test_failed_draft_clear_after_discard_keeps_service_in_sync() -> None:
     assert service.stored_configuration == repository.saved_configuration
     assert service.stored_configuration.active == baseline
     assert not service.is_dirty
+
+
+def test_fourth_preset_can_be_saved_replaced_and_loaded() -> None:
+    panel = make_panel(0.5)
+    stored = make_stored_configuration(panel, panel)
+    repository = InMemoryRepository(stored=stored)
+    service = make_service(stored, repository)
+
+    service.save_active_to_preset(4, "Четвёртый")
+    assert repository.saved_configuration.presets == (
+        None, None, None, PresetConfig("Четвёртый", panel)
+    )
+    replacement = PresetConfig("Обновлённый", make_panel(0.2))
+    service.replace_preset(4, replacement)
+    service.replace_active(make_panel(0.9))
+    assert service.load_preset(4) == replacement.panel
+    assert service.stored_configuration.active == replacement.panel
+    assert service.stored_configuration.baseline == replacement.panel
+    assert repository.saved_configuration == service.stored_configuration
+    assert repository.draft == make_panel(0.9)
