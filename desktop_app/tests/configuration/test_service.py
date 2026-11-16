@@ -325,11 +325,63 @@ def test_fourth_preset_can_be_saved_replaced_and_loaded() -> None:
     assert repository.saved_configuration.presets == (
         None, None, None, PresetConfig("Четвёртый", panel)
     )
+    service.save_active_to_preset(1, "Первый")
     replacement = PresetConfig("Обновлённый", make_panel(0.2))
     service.replace_preset(4, replacement)
-    service.replace_active(make_panel(0.9))
     assert service.load_preset(4) == replacement.panel
     assert service.stored_configuration.active == replacement.panel
     assert service.stored_configuration.baseline == replacement.panel
     assert repository.saved_configuration == service.stored_configuration
-    assert repository.draft == make_panel(0.9)
+    assert service.stored_configuration.active_preset_slot == 4
+
+
+@pytest.mark.parametrize("fail_save", (False, True))
+def test_switch_autosaves_previous_preset_atomically(fail_save):
+    from dataclasses import replace
+    panel = make_panel(0.5)
+    first = PresetConfig("Первый", panel)
+    second = PresetConfig("Второй", make_panel(0.2))
+    stored = replace(make_stored_configuration(panel, panel), presets=(first, None, None, second), active_preset_slot=1)
+    repository = InMemoryRepository(stored=stored)
+    service = make_service(stored, repository)
+    changed = make_panel(0.8, ("intro.wav",))
+    service.replace_active(changed)
+    repository.fail_save = fail_save
+    before = service.stored_configuration
+    if fail_save:
+        with pytest.raises(OSError):
+            service.load_preset(4)
+        assert service.stored_configuration == before
+        assert repository.saved_configuration == stored
+        assert repository.draft == changed
+    else:
+        assert service.load_preset(4) == second.panel
+        assert service.stored_configuration.presets[0] == PresetConfig("Первый", changed)
+        assert service.stored_configuration.active_preset_slot == 4
+        assert service.load_preset(1) == changed
+        assert service.stored_configuration.active_preset_slot == 1
+
+
+def test_reselecting_active_preset_keeps_current_edits():
+    panel = make_panel(0.5)
+    repository = InMemoryRepository()
+    service = make_service(make_stored_configuration(panel, panel), repository)
+    service.save_active_to_preset(4, "Четвёртый")
+    changed = make_panel(0.7)
+    service.replace_active(changed)
+    assert service.load_preset(4) == changed
+    assert service.stored_configuration.presets[3].panel == changed
+    assert not service.is_dirty
+
+
+def test_empty_target_does_not_overwrite_previous_preset():
+    panel = make_panel(0.5)
+    repository = InMemoryRepository()
+    service = make_service(make_stored_configuration(panel, panel), repository)
+    service.save_active_to_preset(1, "Первый")
+    service.replace_active(make_panel(0.8))
+    before = service.stored_configuration
+    with pytest.raises(LookupError):
+        service.load_preset(4)
+    assert service.stored_configuration == before
+    assert repository.saved_configuration.presets[0].panel == panel

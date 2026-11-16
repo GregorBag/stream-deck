@@ -54,7 +54,7 @@ def test_stored_configuration_round_trip_preserves_all_fields() -> None:
     encoded = encode_stored_configuration(stored)
     decoded = decode_stored_configuration(encoded)
 
-    assert encoded["schema_version"] == 2
+    assert encoded["schema_version"] == 3
     assert decoded == stored
 
 
@@ -67,7 +67,7 @@ def test_panel_configuration_round_trip_preserves_all_fields() -> None:
     assert decoded == panel
 
 
-def test_unassigned_channel_round_trip_keeps_schema_version_two() -> None:
+def test_unassigned_channel_round_trip_keeps_schema_version_three() -> None:
     panel = PanelConfiguration(
         channels=(
             MixerChannelConfig("master", 1.0, False),
@@ -85,13 +85,13 @@ def test_unassigned_channel_round_trip_keeps_schema_version_two() -> None:
 
     encoded = encode_stored_configuration(stored)
 
-    assert encoded["schema_version"] == 2
+    assert encoded["schema_version"] == 3
     assert decode_stored_configuration(encoded) == stored
 
 
 def test_decoder_rejects_unknown_schema_version() -> None:
     encoded = encode_stored_configuration(make_stored_configuration())
-    encoded["schema_version"] = 3
+    encoded["schema_version"] = 4
 
     with pytest.raises(ValueError, match="schema_version"):
         decode_stored_configuration(encoded)
@@ -157,7 +157,7 @@ def test_legacy_configuration_adds_empty_fourth_slot_without_changing_data(occup
     saved = encode_stored_configuration(migrated)
 
     assert encoded == original
-    assert saved["schema_version"] == 2
+    assert saved["schema_version"] == 3
     assert saved["active"] == original["active"]
     assert saved["baseline"] == original["baseline"]
     assert saved["presets"] == [*original["presets"], None]
@@ -171,3 +171,25 @@ def test_decoder_rejects_wrong_slot_count_for_schema_version(version, count):
     encoded["presets"] = [None] * count
     with pytest.raises(ValueError):
         decode_stored_configuration(encoded)
+
+
+@pytest.mark.parametrize("slot", (1, 3, 4))
+def test_active_preset_slot_survives_round_trip(slot):
+    from dataclasses import replace
+    stored = replace(make_stored_configuration(), active_preset_slot=slot)
+    assert decode_stored_configuration(encode_stored_configuration(stored)) == stored
+
+
+@pytest.mark.parametrize("slot", (0, 5, True, 1.5, 2))
+def test_invalid_or_empty_active_slot_is_rejected(slot):
+    encoded = encode_stored_configuration(make_stored_configuration())
+    encoded["active_preset_slot"] = slot
+    with pytest.raises(ValueError):
+        decode_stored_configuration(encoded)
+
+
+def test_version_two_migrates_without_guessing_active_slot():
+    encoded = encode_stored_configuration(make_stored_configuration())
+    encoded["schema_version"] = 2
+    del encoded["active_preset_slot"]
+    assert decode_stored_configuration(encoded).active_preset_slot is None

@@ -148,6 +148,7 @@ class StoredConfiguration:
     active: PanelConfiguration
     baseline: PanelConfiguration
     presets: tuple[PresetConfig | None, ...]
+    active_preset_slot: int | None = None
 
     def __post_init__(self) -> None:
         presets = tuple(self.presets)
@@ -159,4 +160,10 @@ class StoredConfiguration:
             raise ValueError("Хранилище должно содержать четыре слота пресетов")
         if not all(preset is None or isinstance(preset, PresetConfig) for preset in presets):
             raise ValueError("Слот должен быть пустым или содержать PresetConfig")
+        slot = self.active_preset_slot
+        if slot is not None:
+            if isinstance(slot, bool) or not isinstance(slot, int) or not 1 <= slot <= PRESET_COUNT:
+                raise ValueError("Активный слот пресета должен быть от 1 до 4 или None")
+            if presets[slot - 1] is None:
+                raise ValueError("Активный слот пресета не должен быть пустым")
         object.__setattr__(self, "presets", presets)

@@ -79,7 +79,7 @@ class ConfigurationView:
                 channel_count = sum(channel.channel_kind != "unassigned" for channel in preset.panel.channels)
                 sound_count = sum(sound.sound_id is not None for sound in preset.panel.sound_buttons)
                 summary = f"Каналов: {channel_count}; звуков: {sound_count}"
-            presets.append({"index": index, "name": preset.name if preset else "Пусто", "summary": summary, "assigned": preset is not None, "accent": "#a16aff"})
+            presets.append({"index": index, "name": preset.name if preset else "Пусто", "summary": summary, "assigned": preset is not None, "active": stored.active_preset_slot == index + 1, "accent": "#a16aff"})
         self.root_.setProperty("presets", presets)
         self.root_.setProperty("render_revision", self.root_.property("render_revision") + 1)
 

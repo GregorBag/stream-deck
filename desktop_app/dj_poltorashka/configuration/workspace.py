@@ -39,6 +39,7 @@ class ConfigurationWorkspace:
             active=panel,
             baseline=self._stored_configuration.baseline,
             presets=self._stored_configuration.presets,
+            active_preset_slot=self._stored_configuration.active_preset_slot,
         )
         return ConfigurationWorkspace(stored)
 
@@ -53,6 +54,7 @@ class ConfigurationWorkspace:
             active=self._stored_configuration.active,
             baseline=self._stored_configuration.active,
             presets=tuple(presets),
+            active_preset_slot=slot,
         )
         return ConfigurationWorkspace(stored)
 
@@ -73,6 +75,7 @@ class ConfigurationWorkspace:
                 active=self._stored_configuration.active,
                 baseline=self._stored_configuration.baseline,
                 presets=tuple(presets),
+                active_preset_slot=self._stored_configuration.active_preset_slot,
             )
         )
 
@@ -82,11 +85,26 @@ class ConfigurationWorkspace:
         if preset is None:
             raise LookupError("Выбранный слот пресета пуст")
 
-        draft = self._stored_configuration.active if self.is_dirty else None
+        current_slot = self._stored_configuration.active_preset_slot
+        if current_slot == slot:
+            preset = self._stored_configuration.presets[preset_index]
+            return PresetLoad(
+                workspace=self.with_saved_preset(slot, preset.name),
+                draft_to_save=None,
+            )
+
+        presets = list(self._stored_configuration.presets)
+        if current_slot is not None:
+            previous = presets[current_slot - 1]
+            presets[current_slot - 1] = PresetConfig(
+                previous.name, self._stored_configuration.active
+            )
+        draft = self._stored_configuration.active if self.is_dirty and current_slot is None else None
         stored = StoredConfiguration(
             active=preset.panel,
             baseline=preset.panel,
-            presets=self._stored_configuration.presets,
+            presets=tuple(presets),
+            active_preset_slot=slot,
         )
         return PresetLoad(
             workspace=ConfigurationWorkspace(stored),

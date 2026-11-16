@@ -161,4 +161,4 @@ def test_legacy_file_migrates_and_persists_fourth_preset(tmp_path: Path) -> None
     changed = replace(loaded, presets=(*loaded.presets[:3], fourth))
     repository.save(changed)
     assert make_repository(tmp_path).load(stored) == changed
-    assert json.loads(paths.configuration_file.read_text(encoding="utf-8"))["schema_version"] == 2
+    assert json.loads(paths.configuration_file.read_text(encoding="utf-8"))["schema_version"] == 3

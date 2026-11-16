@@ -17,7 +17,7 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 16; spacing: 10
         RowLayout {
-            Text { Layout.fillWidth: true; text: "ПРЕСЕТ 0" + (card.preset_index + 1); color: card.accent; font.pixelSize: 10; font.letterSpacing: 2 }
+            Text { Layout.fillWidth: true; text: "ПРЕСЕТ 0" + (card.preset_index + 1) + (card.preset && card.preset.active ? " • АКТИВЕН" : ""); color: card.accent; font.pixelSize: 10; font.letterSpacing: 2 }
             Image { source: card.page.icons.panel || ""; sourceSize.width: 24; sourceSize.height: 24; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
         }
         Text { objectName: "preset_name_" + card.preset_index; Layout.fillWidth: true; text: card.preset ? card.preset.name : "Пусто"; color: "#f0ebff"; font.pixelSize: 20; font.weight: Font.DemiBold; elide: Text.ElideRight }

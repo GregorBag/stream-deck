@@ -12,7 +12,7 @@ from dj_poltorashka.configuration.models import (
 )
 
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _CHANNEL_KINDS = ("unassigned", "master", "application", "microphone")
 
 
@@ -60,15 +60,16 @@ def encode_stored_configuration(stored: StoredConfiguration) -> dict[str, object
         "active": encode_panel_configuration(stored.active),
         "baseline": encode_panel_configuration(stored.baseline),
         "presets": presets,
+        "active_preset_slot": stored.active_preset_slot,
     }
 
 
 def decode_stored_configuration(data: object) -> StoredConfiguration:
     root = _require_mapping(data, "root")
     schema_version = _required(root, "schema_version", "")
-    if isinstance(schema_version, bool) or schema_version not in (1, _SCHEMA_VERSION):
+    if isinstance(schema_version, bool) or schema_version not in (1, 2, _SCHEMA_VERSION):
         raise ValueError(
-            f"schema_version: поддерживаются версии 1 и {_SCHEMA_VERSION}"
+            f"schema_version: поддерживаются версии 1, 2 и {_SCHEMA_VERSION}"
         )
 
     active = _decode_panel_configuration(_required(root, "active", ""), "active")
@@ -94,6 +95,9 @@ def decode_stored_configuration(data: object) -> StoredConfiguration:
             active=active,
             baseline=baseline,
             presets=tuple(presets),
+            active_preset_slot=(
+                _required(root, "active_preset_slot", "") if schema_version == 3 else None
+            ),
         )
     except ValueError as error:
         raise ValueError(f"root: {error}") from error
